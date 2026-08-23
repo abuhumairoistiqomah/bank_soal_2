@@ -1,0 +1,6 @@
+{
+  "name": "NEO ILMA",
+  "description": "School-wide Worksheet & Learning Resource Bank (SD, SMP, SMA) supporting all 24 classes (Inter, AE, MQ) with cascading multi-tier filter hierarchy",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
