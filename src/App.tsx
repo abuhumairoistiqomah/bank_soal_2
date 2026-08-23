@@ -15,6 +15,7 @@ const DEFAULT_GAS_URL =
 const OLD_DEFAULT_URLS = new Set([
   "https://script.google.com/macros/s/AKfycbwBTRmtT5LGquctbs_o2VxvGclxGrcul6-OmOnsx_21LaUeYhVeGNXTsWVVL2bCt1I/exec",
   "https://script.google.com/macros/s/AKfycbzd4NPDov5GY-0UPZTpllomC6KbMnyD23pOUQk9hV4/dev",
+  "https://script.google.com/macros/s/AKfycbzRozJ8E2jXBulDutaeql8J2zwDBCzFaZiY2_qy5L0lgNWAjZ4L0r0OPji7N0RZjv2T/exec",
 ]);
 
 type CachedResources = {
