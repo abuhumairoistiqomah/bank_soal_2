@@ -16,6 +16,7 @@ import {
   Library,
   FolderOpen,
   GraduationCap,
+  UserRound,
   Hash,
 } from "lucide-react";
 
@@ -132,6 +133,33 @@ export default function ResourceCard({ worksheet, selectedClass }: ResourceCardP
               <span>{worksheet.grade || "1 Inter"}</span>
             )}
           </div>
+
+          {(() => {
+            const rawWorksheet = worksheet as Worksheet & Record<string, unknown>;
+            const uploader = String(
+              worksheet.uploader ??
+              rawWorksheet.Uploader ??
+              rawWorksheet.teacher ??
+              rawWorksheet.Teacher ??
+              rawWorksheet.contributor ??
+              rawWorksheet.Contributor ??
+              ""
+            ).trim();
+
+            if (!uploader) return null;
+
+            return (
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
+                <UserRound className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                <span>
+                  Diunggah oleh:{" "}
+                  <span className="font-bold text-slate-600">
+                    {uploader}
+                  </span>
+                </span>
+              </div>
+            );
+          })()}
         </div>
       </div>
 

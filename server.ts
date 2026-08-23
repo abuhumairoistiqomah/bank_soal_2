@@ -110,8 +110,32 @@ app.get("/api/worksheets", async (req, res) => {
         const rawSubject = item.subject ?? item.Subject ?? item["Mata Pelajaran"] ?? item["mata pelajaran"] ?? item.mapel ?? item.Mapel ?? findKeyVal(["subject", "mata pelajaran", "matapelajaran", "mapel"], "Math");
         const rawChapter = item.chapter ?? item.Chapter ?? item.Bab ?? item.bab ?? findKeyVal(["chapter", "bab"], "General");
         const rawTopic = item.topic ?? item.Topic ?? item.Topik ?? item.topik ?? findKeyVal(["topic", "topik"], "General Topic");
-        const rawType = item.type ?? item.Type ?? item.Tipe ?? item.tipe ?? item.format ?? item.Format ?? findKeyVal(["type", "tipe", "format"], "PDF");
+        const rawType = item.type ?? item.Type ?? item.Tipe ?? item.tipe ?? item.format ?? item.Format ?? findKeyVal(["type", "tipe", "format", "jenis file"], "PDF");
         const rawLink = item.link ?? item.Link ?? item.url ?? item.URL ?? item.Url ?? findKeyVal(["link", "url"], "#");
+
+        // Uploader is a first-class field in NEO ILMA.
+        // Preserve common aliases so GA Studio preview behaves exactly like
+        // the Vercel /api/worksheets normalization.
+        const rawUploader =
+          item.uploader ??
+          item.Uploader ??
+          item.teacher ??
+          item.Teacher ??
+          item.guru ??
+          item.Guru ??
+          item["Nama Guru"] ??
+          item["Nama Pengajar"] ??
+          item.contributor ??
+          item.Contributor ??
+          findKeyVal([
+            "uploader",
+            "teacher",
+            "guru",
+            "nama guru",
+            "nama pengajar",
+            "contributor",
+            "pengunggah"
+          ], "");
 
         // Normalize grade as String: handle legacy bare single digits if needed, while keeping full strings intact
         let cleanGrade = rawGrade || "1 Inter";
@@ -129,6 +153,7 @@ app.get("/api/worksheets", async (req, res) => {
           topic: toSafeString(rawTopic, "General Topic"),
           type: toSafeString(rawType, "PDF"),
           link: toSafeString(rawLink, "#"),
+          uploader: toSafeString(rawUploader, ""),
         };
       } catch (rowErr) {
         // Safe row-level fallback so an individual malformed row never crashes the whole response
@@ -141,6 +166,7 @@ app.get("/api/worksheets", async (req, res) => {
           topic: "General Topic",
           type: "PDF",
           link: "#",
+          uploader: "",
         };
       }
     }).filter((item: any) => item !== null && (item.id || item.link));

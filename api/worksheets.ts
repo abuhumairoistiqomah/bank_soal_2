@@ -248,12 +248,11 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const rawData = await fetchGasWithRetry(gasUrl);
     const standardizedData = standardizeData(rawData);
 
-    // Let Vercel/CDN reuse a recent successful response for five minutes and
-    // serve stale content while revalidating if the upstream is briefly slow.
-    res.setHeader(
-      "Cache-Control",
-      "public, s-maxage=300, stale-while-revalidate=86400",
-    );
+    // Always ask GAS for the latest successful dataset.
+    // Frontend localStorage remains the last-known-good fallback, so we keep
+    // stability without allowing Vercel CDN to serve stale metadata such as
+    // a newly-added Uploader column.
+    res.setHeader("Cache-Control", "no-store");
 
     return sendJson(res, 200, {
       success: true,

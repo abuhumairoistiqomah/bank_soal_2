@@ -6,7 +6,7 @@
  * data from Google Sheets into JSON format.
  *
  * Database Header:
- * ID | Grade | Subject | Chapter | Topic | Type | Link
+ * ID | Grade | Subject | Chapter | Topic | Type | Link | Uploader
  *
  * Grade values preserved as exact raw string (e.g. "6 MQ", "6 Inter - 6 MQ").
  * Does not split database rows in Code.gs. Frontend handles target-class parsing.
@@ -91,7 +91,8 @@ function parseRow(row, rawHeaders, normalizedHeaders) {
     chapter: "",
     topic: "",
     type: "",
-    link: ""
+    link: "",
+    uploader: ""
   };
   var hasContent = false;
 
@@ -120,6 +121,11 @@ function parseRow(row, rawHeaders, normalizedHeaders) {
       obj.type = strVal;
     } else if (key === "link") {
       obj.link = strVal;
+    } else if (key === "uploader") {
+      // First-class uploader field.
+      // Header aliases such as Teacher / Guru / Nama Guru are normalized
+      // to the exact JSON property expected by NEO ILMA: "uploader".
+      obj.uploader = strVal;
     } else if (rawKey !== "") {
       // Preserve custom extra columns with lowercase keys
       obj[rawKey.toLowerCase()] = val;
@@ -141,11 +147,39 @@ function normalizeHeader(header) {
   if (/^(subject|mata pelajaran|matapelajaran|mapel)$/i.test(text)) return "subject";
   if (/^(chapter|bab)$/i.test(text)) return "chapter";
   if (/^(topic|topik)$/i.test(text)) return "topic";
-  if (/^(type|tipe|format)$/i.test(text)) return "type";
+  if (/^(type|tipe|format|jenis file)$/i.test(text)) return "type";
   if (/^(link|url)$/i.test(text)) return "link";
+
+  // Uploader is now a first-class NEO ILMA field.
+  // Any of these spreadsheet headers will become JSON key "uploader".
+  if (/^(uploader|teacher|guru|nama guru|nama pengajar|pengunggah|contributor)$/i.test(text)) {
+    return "uploader";
+  }
 
   return text;
 }
+
+// =====================================================
+// OPTIONAL UPLOADER DIAGNOSTIC
+// =====================================================
+/**
+ * Run this manually from Apps Script editor if you want to verify that
+ * Uploader is reaching the API layer before deploying.
+ *
+ * It logs up to 10 resource rows that contain an uploader.
+ */
+function debugUploaderField() {
+  var rows = getWorksheets();
+  var samples = rows
+    .filter(function(item) {
+      return item && String(item.uploader || "").trim() !== "";
+    })
+    .slice(0, 10);
+
+  Logger.log(JSON.stringify(samples, null, 2));
+  return samples;
+}
+
 
 // =====================================================
 // UTILITIES

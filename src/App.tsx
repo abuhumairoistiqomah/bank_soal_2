@@ -7,7 +7,7 @@ import type { Worksheet } from "./types";
 import { AlertCircle, RefreshCw } from "lucide-react";
 
 const GAS_URL_STORAGE_KEY = "neo_ilma_gas_url";
-const RESOURCE_CACHE_KEY = "neo_ilma_resource_cache_v1";
+const RESOURCE_CACHE_KEY = "neo_ilma_resource_cache_v2";
 
 const DEFAULT_GAS_URL =
   "https://script.google.com/macros/s/AKfycbw8GU3fdLoPqT2e1cFDeesfK5MuSvht3IJrcvPf_P8CU8y8vzyIJ4L1t8y9vMnWaiRn/exec";
