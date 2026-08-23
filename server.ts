@@ -8,87 +8,29 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
+// Allow JSON parsing
 app.use(express.json());
 
-function clean(value: unknown): string {
-  return String(value ?? "").trim();
-}
-
-function formatClassName(value: unknown): string {
-  const text = clean(value).replace(/\s+/g, " ");
-  const match = text.match(/^(\d+)\s+(inter|mq|ae)$/i);
-  if (!match) return text;
-
-  const [, numberPart, programRaw] = match;
-  const program = programRaw.toLowerCase();
-  if (program === "inter") return `${numberPart} Inter`;
-  if (program === "mq") return `${numberPart} MQ`;
-  if (program === "ae") return `${numberPart} AE`;
-  return text;
-}
-
-function parseTargetClasses(grade: unknown): string[] {
-  const text = clean(grade);
-  if (!text) return [];
-
-  const seen = new Set<string>();
-  const result: string[] = [];
-
-  text
-    .split(/\s+[-–—]\s+/)
-    .map((value) => formatClassName(value))
-    .filter(Boolean)
-    .forEach((value) => {
-      const key = value.toLowerCase();
-      if (!seen.has(key)) {
-        seen.add(key);
-        result.push(value);
-      }
-    });
-
-  return result;
-}
-
-function normalizeTargetClasses(rawTargets: unknown, grade: string): string[] {
-  if (Array.isArray(rawTargets)) {
-    const seen = new Set<string>();
-    const normalized = rawTargets
-      .map((value) => formatClassName(value))
-      .filter(Boolean)
-      .filter((value) => {
-        const key = value.toLowerCase();
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-
-    if (normalized.length > 0) return normalized;
-  }
-
-  return parseTargetClasses(grade);
-}
-
-app.get("/api/health", (_req, res) => {
+// Health Check API
+app.get("/api/health", (req, res) => {
   res.json({ status: "ok", time: new Date().toISOString() });
 });
 
+// Fetch Worksheets API Proxy
 app.get("/api/worksheets", async (req, res) => {
-  const gasUrl =
-    (req.query.url as string) ||
-    process.env.APPS_SCRIPT_URL ||
-    "https://script.google.com/macros/s/AKfycbw8GU3fdLoPqT2e1cFDeesfK5MuSvht3IJrcvPf_P8CU8y8vzyIJ4L1t8y9vMnWaiRn/exec";
+  const gasUrl = (req.query.url as string) || process.env.APPS_SCRIPT_URL || "https://script.google.com/macros/s/AKfycbw8GU3fdLoPqT2e1cFDeesfK5MuSvht3IJrcvPf_P8CU8y8vzyIJ4L1t8y9vMnWaiRn/exec";
 
   if (!gasUrl) {
     return res.json({
       success: true,
       source: "local",
-      data: defaultWorksheets,
+      data: defaultWorksheets
     });
   }
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25_000);
+    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 seconds timeout
 
     const response = await fetch(gasUrl, {
       method: "GET",
@@ -102,133 +44,119 @@ app.get("/api/worksheets", async (req, res) => {
     }
 
     const text = await response.text();
-    let data: unknown;
-
+    let data;
     try {
       data = JSON.parse(text);
-    } catch {
+    } catch (e) {
       if (gasUrl.trim().endsWith("/dev")) {
         throw new Error(
-          "Your Google Apps Script URL ends with '/dev'. Use a deployed Web App URL ending in '/exec'.",
+          "Your Google Apps Script URL ends with '/dev'. This URL requires developer authentication and cannot be accessed by the server. " +
+          "Please deploy your script as a Web App (Deploy > New deployment), set 'Who has access' to 'Anyone', and use the URL ending in '/exec'."
         );
       }
-
-      const lowerText = text.trim().toLowerCase();
-      if (lowerText.startsWith("<!doctype html") || lowerText.startsWith("<html")) {
+      if (text.trim().toLowerCase().startsWith("<!doctype html") || text.trim().toLowerCase().startsWith("<html")) {
         throw new Error(
-          "Google Apps Script returned HTML instead of JSON. Make sure the Web App is deployed with access set to 'Anyone'.",
+          "Google Apps Script returned an HTML page (likely a login or permission prompt) instead of JSON data. " +
+          "Please verify that you have deployed the script as a Web App, set 'Who has access' to 'Anyone', and that you are using the '/exec' URL."
         );
       }
-
       throw new Error("Invalid JSON response from Google Apps Script web app.");
     }
 
+    // Standardize GAS responses
     if (!Array.isArray(data)) {
-      const message =
-        data && typeof data === "object" && "message" in data
-          ? clean((data as { message?: unknown }).message)
-          : "";
-      throw new Error(
-        message || "Response from Google Apps Script is not an array of resources.",
-      );
+      throw new Error("Response from Google Apps Script is not an array of worksheets.");
     }
 
-    const standardizedData = data
-      .map((rawItem: unknown, idx: number) => {
-        const item =
-          rawItem && typeof rawItem === "object"
-            ? (rawItem as Record<string, unknown>)
-            : {};
+    // ============================================================
+    // EXPRESS / PROXY DATA SAFETY (GRADE STRING PRESERVATION)
+    // - grade MUST remain STRING (e.g. "6 MQ", "6 Inter - 6 MQ")
+    // - Never use Number(item.grade) or parseInt(item.grade)
+    // - Preserves raw Grade values without splitting database rows
+    // ============================================================
+    const standardizedData = data.map((item: any, idx: number) => {
+      if (!item || typeof item !== "object") {
+        return null;
+      }
 
-        const findVal = (keys: string[], defaultVal: unknown = "") => {
-          for (const key of Object.keys(item)) {
-            const normalizedKey = key.toLowerCase().trim();
-            if (
-              keys.some((candidate) => {
-                const normalizedCandidate = candidate.toLowerCase().trim();
-                return (
-                  normalizedKey === normalizedCandidate ||
-                  normalizedKey.includes(normalizedCandidate)
-                );
-              })
-            ) {
-              return item[key];
+      // Safe string normalization helper
+      const toSafeString = (val: any, fallback = ""): string => {
+        if (val === null || val === undefined) return fallback;
+        const str = String(val).trim();
+        return str !== "" ? str : fallback;
+      };
+
+      // Case-insensitive key lookup across bilingual variations
+      const findKeyVal = (candidateKeys: string[], defaultVal = ""): string => {
+        for (const k of Object.keys(item)) {
+          const lowerK = k.toLowerCase().replace(/[\s_-]/g, "");
+          for (const cand of candidateKeys) {
+            const lowerCand = cand.toLowerCase().replace(/[\s_-]/g, "");
+            if (lowerK === lowerCand) {
+              return toSafeString(item[k], defaultVal);
             }
           }
-          return defaultVal;
-        };
+        }
+        return defaultVal;
+      };
 
-        const id = clean(item.id || item.ID || findVal(["id"])) || `gas_${idx + 1}`;
-        const grade = clean(
-          item.grade || item.Grade || item.Kelas || findVal(["grade", "kelas", "class"]),
-        );
-        const subject =
-          clean(
-            item.subject ||
-              item.Subject ||
-              item["Mata Pelajaran"] ||
-              item.mata_pelajaran ||
-              findVal(["subject", "mata pelajaran", "matapelajaran", "mapel"]),
-          ) || "Math";
-        const chapter = clean(
-          item.chapter || item.Chapter || item.Bab || findVal(["chapter", "bab"]),
-        );
-        const topic = clean(
-          item.topic ||
-            item.Topic ||
-            item.Topik ||
-            findVal(["topic", "topik", "sub-bab", "sub bab", "subbab"]),
-        );
-        const type = clean(
-          item.type ||
-            item.Type ||
-            item.Tipe ||
-            findVal(["type", "tipe", "format", "jenis file"]),
-        );
-        const link = clean(item.link || item.Link || item.URL || findVal(["link", "url"]));
-        const uploader = clean(
-          item.uploader ||
-            item.Uploader ||
-            item.teacher ||
-            item.Teacher ||
-            item.contributor ||
-            item.Contributor ||
-            findVal(["uploader", "teacher", "contributor", "pengunggah"]),
-        );
+      try {
+        const rawId = item.id ?? item.ID ?? item.Id ?? findKeyVal(["id"], `gas_${idx + 1}`);
+        // Extract raw grade as a string - never convert to Number or parseInt
+        const rawGrade = String(
+          item.grade ?? item.Grade ?? item.Kelas ?? item.kelas ?? findKeyVal(["grade", "kelas"], "") ?? ""
+        ).trim();
+
+        const rawSubject = item.subject ?? item.Subject ?? item["Mata Pelajaran"] ?? item["mata pelajaran"] ?? item.mapel ?? item.Mapel ?? findKeyVal(["subject", "mata pelajaran", "matapelajaran", "mapel"], "Math");
+        const rawChapter = item.chapter ?? item.Chapter ?? item.Bab ?? item.bab ?? findKeyVal(["chapter", "bab"], "General");
+        const rawTopic = item.topic ?? item.Topic ?? item.Topik ?? item.topik ?? findKeyVal(["topic", "topik"], "General Topic");
+        const rawType = item.type ?? item.Type ?? item.Tipe ?? item.tipe ?? item.format ?? item.Format ?? findKeyVal(["type", "tipe", "format"], "PDF");
+        const rawLink = item.link ?? item.Link ?? item.url ?? item.URL ?? item.Url ?? findKeyVal(["link", "url"], "#");
+
+        // Normalize grade as String: handle legacy bare single digits if needed, while keeping full strings intact
+        let cleanGrade = rawGrade || "1 Inter";
+        if (/^[1-6]$/.test(cleanGrade)) {
+          cleanGrade = `${cleanGrade} Inter`;
+        } else if (/^(7|8|9|10|11|12)$/.test(cleanGrade)) {
+          cleanGrade = `${cleanGrade} AE`;
+        }
 
         return {
-          ...item,
-          id,
-          grade, // IMPORTANT: always string; never parseInt/Number.
-          subject,
-          chapter,
-          topic,
-          type,
-          link,
-          ...(uploader ? { uploader } : {}),
-          targetClasses: normalizeTargetClasses(item.targetClasses, grade),
+          id: toSafeString(rawId, `gas_${idx + 1}`),
+          grade: cleanGrade, // Strictly preserved as String (e.g. "6 MQ", "6 Inter - 6 MQ")
+          subject: toSafeString(rawSubject, "Math"),
+          chapter: toSafeString(rawChapter, "General"),
+          topic: toSafeString(rawTopic, "General Topic"),
+          type: toSafeString(rawType, "PDF"),
+          link: toSafeString(rawLink, "#"),
         };
-      })
-      .filter((item) => item.id || item.link);
+      } catch (rowErr) {
+        // Safe row-level fallback so an individual malformed row never crashes the whole response
+        console.warn(`[Proxy Data Safety] Error normalizing row #${idx}:`, rowErr);
+        return {
+          id: `gas_${idx + 1}`,
+          grade: "1 Inter",
+          subject: "Math",
+          chapter: "General",
+          topic: "General Topic",
+          type: "PDF",
+          link: "#",
+        };
+      }
+    }).filter((item: any) => item !== null && (item.id || item.link));
 
     return res.json({
       success: true,
       source: "gas",
-      data: standardizedData,
+      data: standardizedData
     });
-  } catch (error: unknown) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Failed to fetch from Google Apps Script.";
-
-    console.warn("Error fetching resources from Apps Script:", message);
-
+  } catch (error: any) {
+    console.warn("Error fetching worksheets from Apps Script (expected fallback to local database):", error.message);
     return res.json({
       success: false,
-      error: message,
+      error: error.message || "Failed to fetch from GAS. Please ensure deployment is active and permissions are set to 'Anyone'.",
       source: "fallback",
-      data: defaultWorksheets,
+      data: defaultWorksheets
     });
   }
 });
@@ -244,7 +172,7 @@ async function run() {
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
-    app.get("*", (_req, res) => {
+    app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
