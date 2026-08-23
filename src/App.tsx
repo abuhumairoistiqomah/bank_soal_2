@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Header from "./components/Header";
 import DashboardStats from "./components/DashboardStats";
 import WorksheetList from "./components/WorksheetList";
@@ -6,31 +6,96 @@ import SettingsPanel from "./components/SettingsPanel";
 import type { Worksheet } from "./types";
 import { AlertCircle, RefreshCw } from "lucide-react";
 
+const GAS_URL_STORAGE_KEY = "neo_ilma_gas_url";
+const RESOURCE_CACHE_KEY = "neo_ilma_resource_cache_v1";
+
+const DEFAULT_GAS_URL =
+  "https://script.google.com/macros/s/AKfycbw8GU3fdLoPqT2e1cFDeesfK5MuSvht3IJrcvPf_P8CU8y8vzyIJ4L1t8y9vMnWaiRn/exec";
+
+const OLD_DEFAULT_URLS = new Set([
+  "https://script.google.com/macros/s/AKfycbwBTRmtT5LGquctbs_o2VxvGclxGrcul6-OmOnsx_21LaUeYhVeGNXTsWVVL2bCt1I/exec",
+  "https://script.google.com/macros/s/AKfycbzd4NPDov5GY-0UPZTpllomC6KbMnyD23pOUQk9hV4/dev",
+]);
+
+type CachedResources = {
+  gasUrl: string;
+  savedAt: number;
+  data: Worksheet[];
+};
+
+function getInitialGasUrl(): string {
+  const saved = localStorage.getItem(GAS_URL_STORAGE_KEY);
+
+  if (!saved || OLD_DEFAULT_URLS.has(saved)) {
+    localStorage.setItem(GAS_URL_STORAGE_KEY, DEFAULT_GAS_URL);
+    return DEFAULT_GAS_URL;
+  }
+
+  return saved;
+}
+
+function readResourceCache(gasUrl: string): Worksheet[] {
+  try {
+    const raw = localStorage.getItem(RESOURCE_CACHE_KEY);
+    if (!raw) return [];
+
+    const parsed = JSON.parse(raw) as Partial<CachedResources>;
+    if (parsed.gasUrl !== gasUrl || !Array.isArray(parsed.data)) return [];
+
+    return parsed.data as Worksheet[];
+  } catch {
+    return [];
+  }
+}
+
+function writeResourceCache(gasUrl: string, data: Worksheet[]) {
+  try {
+    const cache: CachedResources = {
+      gasUrl,
+      savedAt: Date.now(),
+      data,
+    };
+    localStorage.setItem(RESOURCE_CACHE_KEY, JSON.stringify(cache));
+  } catch (error) {
+    console.warn("Unable to save NEO ILMA resource cache:", error);
+  }
+}
+
+async function fetchWithTimeout(url: string, timeoutMs = 18_000): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, {
+      method: "GET",
+      signal: controller.signal,
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
 export default function App() {
   // Keep the current UI model: Dashboard remains the main page.
   // Selecting a class only updates the Resource Finder below and scrolls to it.
   const [activeView, setActiveView] = useState<"dashboard" | "settings">("dashboard");
   const [selectedClass, setSelectedClass] = useState<string | undefined>(undefined);
-  const [worksheets, setWorksheets] = useState<Worksheet[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  const [gasUrl, setGasUrl] = useState<string>(() => getInitialGasUrl());
+
+  // Load the last known-good dataset immediately if available.
+  // This prevents a temporary network/server hiccup from blanking the application.
+  const initialCacheRef = useRef<Worksheet[] | null>(null);
+  if (initialCacheRef.current === null) {
+    initialCacheRef.current = readResourceCache(gasUrl);
+  }
+
+  const [worksheets, setWorksheets] = useState<Worksheet[]>(() => initialCacheRef.current || []);
+  const [loading, setLoading] = useState(() => (initialCacheRef.current || []).length === 0);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const [gasUrl, setGasUrl] = useState<string>(() => {
-    const saved = localStorage.getItem("neo_ilma_gas_url");
-    const oldDefault1 =
-      "https://script.google.com/macros/s/AKfycbwBTRmtT5LGquctbs_o2VxvGclxGrcul6-OmOnsx_21LaUeYhVeGNXTsWVVL2bCt1I/exec";
-    const oldDefault2 =
-      "https://script.google.com/macros/s/AKfycbzd4NPDov5GY-0UPZTpllomC6KbMnyD23pOUQk9hV4/dev";
-    const newDefault =
-      "https://script.google.com/macros/s/AKfycbzRozJ8E2jXBulDutaeql8J2zwDBCzFaZiY2_qy5L0lgNWAjZ4L0r0OPji7N0RZjv2T/exec";
-
-    if (!saved || saved === oldDefault1 || saved === oldDefault2) {
-      localStorage.setItem("neo_ilma_gas_url", newDefault);
-      return newDefault;
-    }
-
-    return saved;
-  });
 
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{
@@ -38,55 +103,95 @@ export default function App() {
     message: string;
   } | null>(null);
 
-  const fetchWorksheets = async (urlToFetch: string) => {
-    setLoading(true);
-    setError(null);
+  const fetchWorksheets = async (
+    urlToFetch: string,
+    options: { manual?: boolean; showErrorWithCachedData?: boolean } = {},
+  ) => {
+    const { manual = false, showErrorWithCachedData = false } = options;
+    const hasExistingData = worksheets.length > 0;
+
+    if (manual) {
+      setRefreshing(true);
+    } else if (!hasExistingData) {
+      setLoading(true);
+    }
+
+    if (!hasExistingData || manual) {
+      setError(null);
+    }
+
+    const queryParam = urlToFetch ? `?url=${encodeURIComponent(urlToFetch)}` : "";
+    const endpoint = `/api/worksheets${queryParam}`;
+
+    let lastError: unknown;
 
     try {
-      const queryParam = urlToFetch ? `?url=${encodeURIComponent(urlToFetch)}` : "";
-      const response = await fetch(`/api/worksheets${queryParam}`);
+      // Retry once for a short Vercel/GAS hiccup.
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const response = await fetchWithTimeout(endpoint);
 
-      if (!response.ok) {
-        throw new Error(`Failed to load data from server: HTTP ${response.status}`);
+          if (!response.ok) {
+            throw new Error(`Failed to load data from server: HTTP ${response.status}`);
+          }
+
+          const responseData = await response.json();
+
+          if (!responseData.success || !Array.isArray(responseData.data)) {
+            throw new Error(responseData.error || "Failed to load data from API.");
+          }
+
+          const nextWorksheets = responseData.data as Worksheet[];
+          setWorksheets(nextWorksheets);
+          writeResourceCache(urlToFetch, nextWorksheets);
+          setError(null);
+          return;
+        } catch (attemptError) {
+          lastError = attemptError;
+
+          if (attempt < 2) {
+            await new Promise((resolve) => window.setTimeout(resolve, 800));
+          }
+        }
       }
 
-      const responseData = await response.json();
-
-      if (responseData.success) {
-        setWorksheets(Array.isArray(responseData.data) ? responseData.data : []);
-      } else if (Array.isArray(responseData.data)) {
-        setWorksheets(responseData.data);
-        setError(
-          responseData.error ||
-            "Failed to load Google Sheets data. Showing local fallback resources.",
-        );
-      } else {
-        throw new Error(responseData.error || "Failed to load data from API.");
-      }
+      throw lastError;
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "An error occurred while loading data.";
       console.warn("Error fetching worksheets:", err);
-      setError(message);
+
+      // Stability rule: keep the last successful dataset on screen.
+      // Automatic/background failure stays silent when usable cached data exists.
+      if (!hasExistingData || showErrorWithCachedData) {
+        setError(message);
+      }
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
   useEffect(() => {
+    // Deliberately load only once per app open / GAS URL change.
+    // NO 5-minute polling. Manual refresh remains available in the existing header.
     fetchWorksheets(gasUrl);
-
-    const intervalId = window.setInterval(() => {
-      fetchWorksheets(gasUrl);
-    }, 5 * 60 * 1000);
-
-    return () => window.clearInterval(intervalId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gasUrl]);
 
   const handleSaveGasUrl = (url: string) => {
     setGasUrl(url);
-    localStorage.setItem("neo_ilma_gas_url", url);
+    localStorage.setItem(GAS_URL_STORAGE_KEY, url);
     setTestResult(null);
+
+    const cachedForNewUrl = readResourceCache(url);
+    if (cachedForNewUrl.length > 0) {
+      setWorksheets(cachedForNewUrl);
+      setLoading(false);
+    } else {
+      setWorksheets([]);
+      setLoading(true);
+    }
   };
 
   const handleTestConnection = async (): Promise<boolean> => {
@@ -95,7 +200,7 @@ export default function App() {
 
     try {
       const queryParam = gasUrl ? `?url=${encodeURIComponent(gasUrl)}` : "";
-      const response = await fetch(`/api/worksheets${queryParam}`);
+      const response = await fetchWithTimeout(`/api/worksheets${queryParam}`);
 
       if (!response.ok) {
         throw new Error(`HTTP Error ${response.status}`);
@@ -181,8 +286,10 @@ export default function App() {
         activeView={activeView}
         onViewChange={handleViewChange}
         gasConfigured={Boolean(gasUrl)}
-        onRefresh={() => fetchWorksheets(gasUrl)}
-        isRefreshing={loading}
+        onRefresh={() =>
+          fetchWorksheets(gasUrl, { manual: true, showErrorWithCachedData: true })
+        }
+        isRefreshing={refreshing}
       />
 
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -194,7 +301,12 @@ export default function App() {
                 <p className="font-bold">Notice</p>
                 <p className="font-medium leading-relaxed text-amber-800">{error}</p>
                 <button
-                  onClick={() => fetchWorksheets(gasUrl)}
+                  onClick={() =>
+                    fetchWorksheets(gasUrl, {
+                      manual: true,
+                      showErrorWithCachedData: true,
+                    })
+                  }
                   className="flex cursor-pointer items-center gap-1.5 pt-1 text-xs font-extrabold text-blue-700 transition-colors hover:text-blue-900"
                 >
                   <RefreshCw className="h-3 w-3" /> Retry
@@ -204,7 +316,7 @@ export default function App() {
           </div>
         )}
 
-        {loading ? (
+        {loading && worksheets.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-4 py-24">
             <div className="relative">
               <div className="h-12 w-12 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" />
