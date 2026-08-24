@@ -1,7 +1,7 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Worksheet, THREE_PROGRAMS, resolveClassName } from "../types";
 import { getClassCounts } from "../utils/resourceFilters";
-import { GraduationCap, Layers, ChevronRight } from "lucide-react";
+import { GraduationCap, Layers, ChevronRight, ChevronDown, ChevronUp } from "lucide-react";
 
 interface BrowseByProgramProps {
   worksheets: Worksheet[];
@@ -9,11 +9,42 @@ interface BrowseByProgramProps {
   onSelectClass: (className: string) => void;
 }
 
+const BROWSE_VISIBILITY_KEY = "neo_ilma_browse_program_expanded_v1";
+
 export default function BrowseByProgram({
   worksheets,
   selectedClass,
   onSelectClass,
 }: BrowseByProgramProps) {
+  // Default collapsed on first visit to save vertical space.
+  // The user's last choice is remembered in this browser.
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(BROWSE_VISIBILITY_KEY);
+      if (saved !== null) {
+        setIsExpanded(saved === "true");
+      }
+    } catch {
+      // Ignore storage errors and keep the safe default: collapsed.
+    }
+  }, []);
+
+  const toggleExpanded = () => {
+    setIsExpanded((current) => {
+      const next = !current;
+
+      try {
+        window.localStorage.setItem(BROWSE_VISIBILITY_KEY, String(next));
+      } catch {
+        // UI still works even if storage is unavailable.
+      }
+
+      return next;
+    });
+  };
+
   // Pre-calculate class counts in a single pass with useMemo (Rule 35: Avoid recalculating large arrays repeatedly)
   const { counts: classCounts } = useMemo(() => {
     return getClassCounts(worksheets);
@@ -41,9 +72,9 @@ export default function BrowseByProgram({
   return (
     <section id="browse-by-program-section" className="space-y-4">
       {/* Section Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-        <div>
-          <div className="flex items-center gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center flex-wrap gap-2">
             <h2 className="font-display text-lg sm:text-xl font-extrabold tracking-tight text-slate-900">
               Browse by Program
             </h2>
@@ -56,27 +87,48 @@ export default function BrowseByProgram({
           </p>
         </div>
 
-        {selectedClass && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500 font-medium">Active:</span>
-            <span className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1 text-xs font-bold text-white shadow-xs">
-              <GraduationCap className="h-3.5 w-3.5" />
-              Kelas {selectedClass}
-            </span>
-            <button
-              type="button"
-              onClick={() => onSelectClass("")}
-              aria-label="Reset pilihan kelas aktif"
-              className="text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors underline cursor-pointer focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:outline-none rounded-sm"
-            >
-              Reset
-            </button>
-          </div>
-        )}
+        <div className="flex items-center gap-2 flex-wrap sm:justify-end">
+          {selectedClass && (
+            <>
+              <span className="text-xs text-slate-500 font-medium">Active:</span>
+              <span className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1 text-xs font-bold text-white shadow-xs">
+                <GraduationCap className="h-3.5 w-3.5" />
+                Kelas {selectedClass}
+              </span>
+              <button
+                type="button"
+                onClick={() => onSelectClass("")}
+                aria-label="Reset pilihan kelas aktif"
+                className="text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors underline cursor-pointer focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:outline-none rounded-sm"
+              >
+                Reset
+              </button>
+            </>
+          )}
+
+          <button
+            type="button"
+            onClick={toggleExpanded}
+            aria-expanded={isExpanded}
+            aria-controls="browse-program-cards"
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-extrabold text-slate-700 shadow-xs transition-all hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 focus-visible:outline-none"
+          >
+            {isExpanded ? "Sembunyikan Program" : "Tampilkan Program"}
+            {isExpanded ? (
+              <ChevronUp className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronDown className="h-3.5 w-3.5" />
+            )}
+          </button>
+        </div>
       </div>
 
-      {/* The 3 Programs Cards Grid (Rule 22: Stacks cleanly on mobile, 3-cols on lg) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      {/* Program cards are collapsed by default to save vertical space. */}
+      {isExpanded && (
+      <div
+        id="browse-program-cards"
+        className="grid grid-cols-1 lg:grid-cols-3 gap-5"
+      >
         {THREE_PROGRAMS.map((program) => {
           const programTotalFiles = getProgramCount(program.id);
           const isInter = program.id === "INTER";
@@ -231,6 +283,7 @@ export default function BrowseByProgram({
           );
         })}
       </div>
+      )}
     </section>
   );
 }
