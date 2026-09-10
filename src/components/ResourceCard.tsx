@@ -4,6 +4,7 @@ import {
   normalizeSubject,
   normalizeChapter,
   normalizeTopic,
+  normalizeTaskName,
   normalizeType,
   normalizeCompare,
   getTargetClasses,
@@ -67,7 +68,10 @@ export function renderFormatBadge(typeString: string) {
 export default function ResourceCard({ worksheet, selectedClass }: ResourceCardProps) {
   const displaySubject = normalizeSubject(worksheet.subject) || "General Subject";
   const displayChapter = normalizeChapter(worksheet.chapter);
-  const displayTopic = normalizeTopic(worksheet.topic) || "Resource";
+  const displayTopic = normalizeTopic(worksheet.topic);
+  const explicitTaskName = normalizeTaskName(worksheet.taskName);
+  const displayTaskName = explicitTaskName || displayTopic || "Resource";
+  const showTopicMetadata = Boolean(explicitTaskName) && Boolean(displayTopic) && normalizeCompare(explicitTaskName) !== normalizeCompare(displayTopic);
   const targetClasses = getTargetClasses(worksheet.grade);
   const visibleClasses =
     selectedClass && selectedClass !== "All"
@@ -98,19 +102,26 @@ export default function ResourceCard({ worksheet, selectedClass }: ResourceCardP
           </div>
         </div>
 
-        {/* TOPIC / SUB-BAB (DOMINANT VISUAL ELEMENT - RULE 15) */}
+        {/* TASK NAME — dominant individual resource title. Legacy rows fall back to Topic. */}
         <div className="pt-3 pb-2.5">
           <h4 className="font-display text-base sm:text-lg font-black tracking-tight text-slate-900 group-hover:text-blue-600 transition-colors leading-snug">
-            {displayTopic}
+            {displayTaskName}
           </h4>
         </div>
 
-        {/* CHAPTER & CLASS METADATA */}
+        {/* CHAPTER, TOPIC & CLASS METADATA */}
         <div className="space-y-1.5 text-xs text-slate-600">
           {displayChapter && (
             <div className="flex items-start gap-1.5 text-slate-600 font-medium">
               <FolderOpen className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
               <span className="line-clamp-1">{displayChapter}</span>
+            </div>
+          )}
+
+          {showTopicMetadata && (
+            <div className="pl-5 text-[11px] leading-snug text-slate-500">
+              <span className="font-semibold text-slate-400">Topik:</span>{" "}
+              <span className="font-medium">{displayTopic}</span>
             </div>
           )}
 
@@ -174,7 +185,7 @@ export default function ResourceCard({ worksheet, selectedClass }: ResourceCardP
           href={worksheet.link}
           target="_blank"
           rel="noopener noreferrer"
-          aria-label={`Buka ${displayTopic}`}
+          aria-label={`Buka ${displayTaskName}`}
           className="inline-flex items-center gap-1.5 min-h-[40px] rounded-xl bg-blue-600 px-4 py-2 text-xs font-extrabold text-white transition-all hover:bg-blue-700 shadow-xs shadow-blue-100 active:scale-97 cursor-pointer focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:outline-none"
         >
           <span>{buttonText}</span>

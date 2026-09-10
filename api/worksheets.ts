@@ -189,6 +189,15 @@ function standardizeData(data: unknown[]) {
           item.Topik ||
           findVal(["topic", "topik", "sub-bab", "sub bab", "subbab"]),
       );
+      const taskName = clean(
+        item.taskName ||
+          item.TaskName ||
+          item.task_name ||
+          item.Task_Name ||
+          item["Task Name"] ||
+          item["Nama Tugas"] ||
+          findVal(["task_name", "task name", "taskname", "nama tugas", "judul tugas"]),
+      );
       const type = clean(
         item.type ||
           item.Type ||
@@ -213,6 +222,7 @@ function standardizeData(data: unknown[]) {
         subject,
         chapter,
         topic,
+        ...(taskName ? { taskName } : {}),
         type,
         link,
         ...(uploader ? { uploader } : {}),

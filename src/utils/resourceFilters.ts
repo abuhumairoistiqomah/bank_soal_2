@@ -46,6 +46,10 @@ export function normalizeTopic(topic: unknown): string {
   return String(topic ?? "").trim();
 }
 
+export function normalizeTaskName(taskName: unknown): string {
+  return String(taskName ?? "").trim();
+}
+
 export function normalizeType(type: unknown): string {
   return String(type ?? "").trim();
 }
@@ -406,7 +410,13 @@ export function sortWorksheetsHierarchically(
     // 4. Topic natural order
     const topA = normalizeTopic(a.topic);
     const topB = normalizeTopic(b.topic);
-    return topA.localeCompare(topB, "id", { numeric: true });
+    const topCompare = topA.localeCompare(topB, "id", { numeric: true });
+    if (topCompare !== 0) return topCompare;
+
+    // 5. Task Name natural order; legacy rows fall back to Topic.
+    const taskA = normalizeTaskName(a.taskName) || topA;
+    const taskB = normalizeTaskName(b.taskName) || topB;
+    return taskA.localeCompare(taskB, "id", { numeric: true });
   });
 }
 
@@ -460,6 +470,7 @@ export function filterAndSearchWorksheets(
       const sSubjectText = normalizeCompare(w.subject);
       const sChapterText = normalizeCompare(w.chapter);
       const sTopicText = normalizeCompare(w.topic);
+      const sTaskNameText = normalizeCompare(w.taskName);
       const sGradeText = normalizeCompare(w.grade);
       const sTypeText = normalizeCompare(w.type);
       const sIdText = normalizeCompare(w.id);
@@ -468,6 +479,7 @@ export function filterAndSearchWorksheets(
         sSubjectText.includes(query) ||
         sChapterText.includes(query) ||
         sTopicText.includes(query) ||
+        sTaskNameText.includes(query) ||
         sGradeText.includes(query) ||
         sTypeText.includes(query) ||
         sIdText.includes(query);

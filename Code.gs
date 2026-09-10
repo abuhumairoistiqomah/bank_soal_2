@@ -6,7 +6,7 @@
  * data from Google Sheets into JSON format.
  *
  * Database Header:
- * ID | Grade | Subject | Chapter | Topic | Type | Link | Uploader
+ * ID | Grade | Subject | Chapter | Topic | Task_Name | Type | Link | Uploader
  *
  * Grade values preserved as exact raw string (e.g. "6 MQ", "6 Inter - 6 MQ").
  * Does not split database rows in Code.gs. Frontend handles target-class parsing.
@@ -90,6 +90,7 @@ function parseRow(row, rawHeaders, normalizedHeaders) {
     subject: CONFIG.DEFAULT_SUBJECT,
     chapter: "",
     topic: "",
+    taskName: "",
     type: "",
     link: "",
     uploader: ""
@@ -117,6 +118,8 @@ function parseRow(row, rawHeaders, normalizedHeaders) {
       obj.chapter = strVal;
     } else if (key === "topic") {
       obj.topic = strVal;
+    } else if (key === "taskName") {
+      obj.taskName = strVal;
     } else if (key === "type") {
       obj.type = strVal;
     } else if (key === "link") {
@@ -146,7 +149,8 @@ function normalizeHeader(header) {
   if (/^(grade|kelas)$/i.test(text)) return "grade";
   if (/^(subject|mata pelajaran|matapelajaran|mapel)$/i.test(text)) return "subject";
   if (/^(chapter|bab)$/i.test(text)) return "chapter";
-  if (/^(topic|topik)$/i.test(text)) return "topic";
+  if (/^(topic|topik|sub-bab|sub bab|subbab)$/i.test(text)) return "topic";
+  if (/^(task_name|task name|taskname|nama tugas|judul tugas)$/i.test(text)) return "taskName";
   if (/^(type|tipe|format|jenis file)$/i.test(text)) return "type";
   if (/^(link|url)$/i.test(text)) return "link";
 

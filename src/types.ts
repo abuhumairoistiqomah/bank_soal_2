@@ -10,6 +10,7 @@ export interface Worksheet {
   subject: string; // Mata Pelajaran (Dynamic from data)
   chapter: string; // Bab (Dynamic from data)
   topic: string; // Sub-Bab / Topik (Dynamic from data)
+  taskName?: string; // Nama Tugas: individual resource title. Optional for legacy rows.
   type: string; // Jenis File (PDF, Quizizz, Learning Material, etc. Dynamic from data)
   link: string; // Resource URL
   uploader?: string;

@@ -109,7 +109,8 @@ app.get("/api/worksheets", async (req, res) => {
 
         const rawSubject = item.subject ?? item.Subject ?? item["Mata Pelajaran"] ?? item["mata pelajaran"] ?? item.mapel ?? item.Mapel ?? findKeyVal(["subject", "mata pelajaran", "matapelajaran", "mapel"], "Math");
         const rawChapter = item.chapter ?? item.Chapter ?? item.Bab ?? item.bab ?? findKeyVal(["chapter", "bab"], "General");
-        const rawTopic = item.topic ?? item.Topic ?? item.Topik ?? item.topik ?? findKeyVal(["topic", "topik"], "General Topic");
+        const rawTopic = item.topic ?? item.Topic ?? item.Topik ?? item.topik ?? findKeyVal(["topic", "topik", "sub-bab", "sub bab", "subbab"], "General Topic");
+        const rawTaskName = item.taskName ?? item.TaskName ?? item.task_name ?? item.Task_Name ?? item["Task Name"] ?? item["Nama Tugas"] ?? findKeyVal(["task_name", "task name", "taskname", "nama tugas", "judul tugas"], "");
         const rawType = item.type ?? item.Type ?? item.Tipe ?? item.tipe ?? item.format ?? item.Format ?? findKeyVal(["type", "tipe", "format", "jenis file"], "PDF");
         const rawLink = item.link ?? item.Link ?? item.url ?? item.URL ?? item.Url ?? findKeyVal(["link", "url"], "#");
 
@@ -151,6 +152,7 @@ app.get("/api/worksheets", async (req, res) => {
           subject: toSafeString(rawSubject, "Math"),
           chapter: toSafeString(rawChapter, "General"),
           topic: toSafeString(rawTopic, "General Topic"),
+          taskName: toSafeString(rawTaskName, ""),
           type: toSafeString(rawType, "PDF"),
           link: toSafeString(rawLink, "#"),
           uploader: toSafeString(rawUploader, ""),
@@ -164,6 +166,7 @@ app.get("/api/worksheets", async (req, res) => {
           subject: "Math",
           chapter: "General",
           topic: "General Topic",
+          taskName: "",
           type: "PDF",
           link: "#",
           uploader: "",
