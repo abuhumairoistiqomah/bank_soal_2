@@ -7,6 +7,7 @@ import {
   normalizeTaskName,
   normalizeType,
   normalizeCompare,
+  normalizeAcademicYear,
   getTargetClasses,
 } from "../utils/resourceFilters";
 import {
@@ -18,6 +19,7 @@ import {
   FolderOpen,
   GraduationCap,
   UserRound,
+  CalendarRange,
   Hash,
 } from "lucide-react";
 
@@ -69,6 +71,7 @@ export default function ResourceCard({ worksheet, selectedClass }: ResourceCardP
   const displaySubject = normalizeSubject(worksheet.subject) || "General Subject";
   const displayChapter = normalizeChapter(worksheet.chapter);
   const displayTopic = normalizeTopic(worksheet.topic);
+  const displayAcademicYear = normalizeAcademicYear(worksheet.academicYear);
   const explicitTaskName = normalizeTaskName(worksheet.taskName);
   const displayTaskName = explicitTaskName || displayTopic || "Resource";
   const showTopicMetadata = Boolean(explicitTaskName) && Boolean(displayTopic) && normalizeCompare(explicitTaskName) !== normalizeCompare(displayTopic);
@@ -144,6 +147,18 @@ export default function ResourceCard({ worksheet, selectedClass }: ResourceCardP
               <span>{worksheet.grade || "1 Inter"}</span>
             )}
           </div>
+
+          {displayAcademicYear && (
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
+              <CalendarRange className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+              <span>
+                Tahun Ajaran:{" "}
+                <span className="font-bold text-slate-600">
+                  {displayAcademicYear}
+                </span>
+              </span>
+            </div>
+          )}
 
           {(() => {
             const rawWorksheet = worksheet as Worksheet & Record<string, unknown>;

@@ -10,12 +10,14 @@ import {
   X,
   RotateCcw,
   CheckCircle2,
+  CalendarRange,
 } from "lucide-react";
 import { OptionWithCount } from "../utils/resourceFilters";
 import { CLASS_ORDER } from "../utils/classConfig";
 
 interface ResourceFinderProps {
   filters: {
+    academicYear: string;
     class: string;
     subject: string;
     chapter: string;
@@ -23,6 +25,10 @@ interface ResourceFinderProps {
     type: string;
   };
   searchQuery: string;
+  academicYearData: {
+    list: OptionWithCount[];
+    total: number;
+  };
   classData: {
     counts: Record<string, number>;
     total: number;
@@ -43,6 +49,7 @@ interface ResourceFinderProps {
     list: OptionWithCount[];
     total: number;
   };
+  onAcademicYearChange: (academicYear: string) => void;
   onClassChange: (className: string) => void;
   onSubjectChange: (subject: string) => void;
   onChapterChange: (chapter: string) => void;
@@ -55,11 +62,13 @@ interface ResourceFinderProps {
 export default function ResourceFinder({
   filters,
   searchQuery,
+  academicYearData,
   classData,
   subjectData,
   chapterData,
   topicData,
   typeData,
+  onAcademicYearChange,
   onClassChange,
   onSubjectChange,
   onChapterChange,
@@ -68,12 +77,15 @@ export default function ResourceFinder({
   onSearchChange,
   onResetFilters,
 }: ResourceFinderProps) {
+  const isAcademicYearSelected =
+    filters.academicYear !== "All" && filters.academicYear !== "";
   const isClassSelected = filters.class !== "All" && filters.class !== "";
   const isSubjectSelected = isClassSelected && filters.subject !== "All" && filters.subject !== "";
   const isChapterSelected = isSubjectSelected && filters.chapter !== "All" && filters.chapter !== "";
   const isTopicSelected = isChapterSelected && filters.topic !== "All" && filters.topic !== "";
 
   const activeFiltersCount = [
+    isAcademicYearSelected,
     isClassSelected,
     isSubjectSelected,
     isChapterSelected,
@@ -116,6 +128,49 @@ export default function ResourceFinder({
             <span>Reset Filters ({activeFiltersCount})</span>
           </button>
         )}
+      </div>
+
+      {/* Independent global Academic Year filter — data-driven from MASTER */}
+      <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+          <div className="flex items-center gap-2 min-w-fit">
+            <CalendarRange className="h-4 w-4 text-blue-600 shrink-0" />
+            <div>
+              <label
+                htmlFor="filter-academic-year-select"
+                className="text-xs font-black uppercase tracking-wider text-slate-700"
+              >
+                Tahun Ajaran
+              </label>
+              <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium mt-0.5">
+                Filter global, otomatis mengikuti tahun yang tersedia di database.
+              </p>
+            </div>
+          </div>
+
+          <div className="relative w-full sm:max-w-[280px] sm:ml-auto">
+            <select
+              id="filter-academic-year-select"
+              aria-label="Filter berdasarkan Tahun Ajaran"
+              value={filters.academicYear}
+              onChange={(e) => onAcademicYearChange(e.target.value)}
+              className={`w-full min-h-[44px] appearance-none rounded-xl border px-3.5 py-2.5 text-xs sm:text-sm font-bold transition-all focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:outline-none cursor-pointer ${
+                isAcademicYearSelected
+                  ? "border-blue-500 bg-blue-50/70 text-blue-900"
+                  : "border-slate-300 bg-white text-slate-800 focus:border-blue-500"
+              }`}
+            >
+              <option value="All">
+                Semua Tahun Ajaran ({academicYearData.total} items)
+              </option>
+              {academicYearData.list.map((item) => (
+                <option key={item.name} value={item.name}>
+                  {item.name} ({item.count} items)
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
       </div>
 
       {/* 5-Column Progressive Filter Grid (Rule 21: Stack vertically on mobile, 2-3 on tablet, 5 on desktop) */}
@@ -388,7 +443,7 @@ export default function ResourceFinder({
             <input
               type="text"
               id="search-input"
-              aria-label="Cari lembar kerja atau materi berdasarkan kata kunci, topik, mata pelajaran, bab, atau pengunggah"
+              aria-label="Cari lembar kerja atau materi berdasarkan kata kunci, topik, mata pelajaran, bab, tahun ajaran, atau pengunggah"
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
               placeholder="Cari materi, topik, mapel, atau nama pengunggah..."
@@ -408,8 +463,13 @@ export default function ResourceFinder({
           </div>
 
           <p className="mt-2 pl-1 text-[11px] sm:text-xs leading-relaxed text-slate-500">
-            Pencarian mendukung beberapa kata kunci sekaligus. Pisahkan dengan titik koma (;).<br /> Contoh:{" "}
-            <span className="font-medium text-slate-600">untuk mencari file tentang <b> Review yang diampu Mr Sony </b> maka kata kuncinya: <b> review; Sony </b></span>
+            Pencarian mendukung beberapa kata kunci sekaligus. Pisahkan dengan titik koma (;).
+            <br />
+            Contoh:{" "}
+            <span className="font-medium text-slate-600">
+              untuk mencari file tentang <b>Review yang diampu Mr Sony</b> maka kata kuncinya:{" "}
+              <b>review; Sony</b>
+            </span>
           </p>
         </div>
 

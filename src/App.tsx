@@ -14,8 +14,9 @@ import { AlertCircle, RefreshCw } from "lucide-react";
 const GAS_URL_STORAGE_KEY = "neo_ilma_gas_url";
 
 // New cache version, while still being able to read older last-good caches.
-const RESOURCE_CACHE_KEY = "neo_ilma_resource_cache_v3";
+const RESOURCE_CACHE_KEY = "neo_ilma_resource_cache_v4";
 const LEGACY_RESOURCE_CACHE_KEYS = [
+  "neo_ilma_resource_cache_v3",
   "neo_ilma_resource_cache_v2",
   "neo_ilma_resource_cache_v1",
 ];

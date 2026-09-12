@@ -138,6 +138,23 @@ app.get("/api/worksheets", async (req, res) => {
             "pengunggah"
           ], "");
 
+        // Academic Year is a first-class optional field.
+        // Keep canonical values such as "2024-2025" exactly as stored.
+        const rawAcademicYear =
+          item.academicYear ??
+          item.AcademicYear ??
+          item.academic_year ??
+          item.Academic_Year ??
+          item["Academic Year"] ??
+          item["Tahun Ajaran"] ??
+          findKeyVal([
+            "academic_year",
+            "academic year",
+            "academicyear",
+            "tahun ajaran",
+            "tahun_ajaran"
+          ], "");
+
         // Normalize grade as String: handle legacy bare single digits if needed, while keeping full strings intact
         let cleanGrade = rawGrade || "1 Inter";
         if (/^[1-6]$/.test(cleanGrade)) {
@@ -156,6 +173,7 @@ app.get("/api/worksheets", async (req, res) => {
           type: toSafeString(rawType, "PDF"),
           link: toSafeString(rawLink, "#"),
           uploader: toSafeString(rawUploader, ""),
+          academicYear: toSafeString(rawAcademicYear, ""),
         };
       } catch (rowErr) {
         // Safe row-level fallback so an individual malformed row never crashes the whole response
@@ -170,6 +188,7 @@ app.get("/api/worksheets", async (req, res) => {
           type: "PDF",
           link: "#",
           uploader: "",
+          academicYear: "",
         };
       }
     }).filter((item: any) => item !== null && (item.id || item.link));

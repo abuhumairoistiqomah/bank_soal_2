@@ -3,6 +3,7 @@ import { Filter, X, RotateCcw } from "lucide-react";
 
 interface ActiveFilterBreadcrumbProps {
   filters: {
+    academicYear: string;
     class: string;
     subject: string;
     chapter: string;
@@ -10,6 +11,7 @@ interface ActiveFilterBreadcrumbProps {
     type: string;
   };
   searchQuery: string;
+  onClearAcademicYear: () => void;
   onClearClass: () => void;
   onClearSubject: () => void;
   onClearChapter: () => void;
@@ -22,6 +24,7 @@ interface ActiveFilterBreadcrumbProps {
 export default function ActiveFilterBreadcrumb({
   filters,
   searchQuery,
+  onClearAcademicYear,
   onClearClass,
   onClearSubject,
   onClearChapter,
@@ -30,6 +33,8 @@ export default function ActiveFilterBreadcrumb({
   onClearSearch,
   onResetAll,
 }: ActiveFilterBreadcrumbProps) {
+  const isAcademicYearSelected =
+    filters.academicYear !== "All" && filters.academicYear !== "";
   const isClassSelected = filters.class !== "All" && filters.class !== "";
   const isSubjectSelected = filters.subject !== "All" && filters.subject !== "";
   const isChapterSelected = filters.chapter !== "All" && filters.chapter !== "";
@@ -38,6 +43,7 @@ export default function ActiveFilterBreadcrumb({
   const isSearchActive = searchQuery.trim() !== "";
 
   const hasActiveFilters =
+    isAcademicYearSelected ||
     isClassSelected ||
     isSubjectSelected ||
     isChapterSelected ||
@@ -60,6 +66,22 @@ export default function ActiveFilterBreadcrumb({
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5 flex-1">
+        {/* Academic Year Chip */}
+        {isAcademicYearSelected && (
+          <span className="inline-flex items-center gap-1 rounded-xl bg-violet-50 border border-violet-200 px-2.5 py-1 text-xs font-bold text-violet-800 shadow-3xs">
+            <span>TA {filters.academicYear}</span>
+            <button
+              type="button"
+              aria-label={`Hapus filter Tahun Ajaran ${filters.academicYear}`}
+              onClick={onClearAcademicYear}
+              className="ml-0.5 rounded-full p-0.5 text-violet-400 hover:bg-violet-100 hover:text-violet-700 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-violet-600 focus-visible:outline-none"
+              title={`Hapus filter Tahun Ajaran ${filters.academicYear}`}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </span>
+        )}
+
         {/* Class Chip */}
         {isClassSelected && (
           <span className="inline-flex items-center gap-1 rounded-xl bg-blue-50 border border-blue-200 px-2.5 py-1 text-xs font-bold text-blue-800 shadow-3xs">

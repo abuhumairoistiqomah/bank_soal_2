@@ -55,6 +55,53 @@ export function normalizeType(type: unknown): string {
 }
 
 /**
+ * Canonical Academic Year values use YYYY-YYYY.
+ * Blank / legacy rows remain blank so they still appear under
+ * "Semua Tahun Ajaran" until the database is backfilled.
+ */
+export function normalizeAcademicYear(value: unknown): string {
+  const text = String(value ?? "").trim().replace(/\s+/g, "");
+  return /^\d{4}-\d{4}$/.test(text) ? text : "";
+}
+
+/**
+ * Dynamic year filter source. Nothing is hardcoded here:
+ * values are derived from MASTER data and sorted newest -> oldest.
+ */
+export function getAcademicYearCounts(
+  worksheets: Worksheet[]
+): { list: OptionWithCount[]; total: number } {
+  const years = worksheets
+    .map((w) => normalizeAcademicYear(w.academicYear))
+    .filter(Boolean);
+
+  const list = buildUniqueOptionsWithCount(years, (a, b) => {
+    const aStart = Number(a.name.slice(0, 4));
+    const bStart = Number(b.name.slice(0, 4));
+
+    if (aStart !== bStart) return bStart - aStart;
+    return b.name.localeCompare(a.name, "id", { numeric: true });
+  });
+
+  return { list, total: worksheets.length };
+}
+
+export function filterWorksheetsByAcademicYear(
+  worksheets: Worksheet[],
+  selectedAcademicYear?: string
+): Worksheet[] {
+  const selected = normalizeCompare(selectedAcademicYear);
+
+  if (!selected || selected === "all") {
+    return worksheets;
+  }
+
+  return worksheets.filter(
+    (w) => normalizeCompare(normalizeAcademicYear(w.academicYear)) === selected
+  );
+}
+
+/**
  * Case-insensitive normalized string for comparisons
  */
 export function normalizeCompare(val: unknown): string {
@@ -68,6 +115,7 @@ export function normalizeCompare(val: unknown): string {
  */
 
 export interface FilterCriteria {
+  selectedAcademicYear?: string; // Independent global dimension; "All" or YYYY-YYYY
   selectedClass: string; // "All" or e.g. "3 INTER", "6 MQ", "8 MQ"
   selectedSubject: string; // "All" or string
   selectedChapter: string; // "All" or string
@@ -432,6 +480,7 @@ export function filterAndSearchWorksheets(
     .split(";")
     .map((part) => normalizeCompare(part))
     .filter(Boolean);
+  const sAcademicYear = normalizeCompare(criteria.selectedAcademicYear);
   const sClass = criteria.selectedClass;
   const sSubject = normalizeCompare(criteria.selectedSubject);
   const sChapter = normalizeCompare(criteria.selectedChapter);
@@ -439,6 +488,12 @@ export function filterAndSearchWorksheets(
   const sType = normalizeCompare(criteria.selectedType);
 
   return worksheets.filter((w) => {
+    // Global Academic Year filter: independent from the content hierarchy.
+    if (sAcademicYear && sAcademicYear !== "all") {
+      const wAcademicYear = normalizeCompare(normalizeAcademicYear(w.academicYear));
+      if (wAcademicYear !== sAcademicYear) return false;
+    }
+
     // 1. Class filter: matches if target class is one of the assigned classes in w.grade
     if (sClass && sClass !== "All" && sClass.trim() !== "") {
       if (!isWorksheetInClass(w.grade, sClass)) return false;
@@ -486,6 +541,7 @@ export function filterAndSearchWorksheets(
         normalizeCompare(w.type),
         normalizeCompare(w.id),
         normalizeCompare(w.uploader),
+        normalizeCompare(normalizeAcademicYear(w.academicYear)),
       ];
 
       const matchAllKeywords = queries.every((query) =>

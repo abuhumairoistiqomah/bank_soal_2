@@ -14,6 +14,7 @@ export interface Worksheet {
   type: string; // Jenis File (PDF, Quizizz, Learning Material, etc. Dynamic from data)
   link: string; // Resource URL
   uploader?: string;
+  academicYear?: string; // Tahun ajaran canonical: YYYY-YYYY
   targetClasses?: string[];
 }
 

@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { Worksheet } from "../types";
 import {
+  getAcademicYearCounts,
+  filterWorksheetsByAcademicYear,
   getClassCounts,
   getSubjectCounts,
   getChapterCounts,
@@ -25,6 +27,7 @@ interface WorksheetListProps {
 }
 
 interface FilterState {
+  academicYear: string;
   class: string;
   subject: string;
   chapter: string;
@@ -43,6 +46,7 @@ export default function WorksheetList({
     if (typeof window !== "undefined") {
       try {
         const params = new URLSearchParams(window.location.search);
+        const urlAcademicYear = params.get("year");
         const urlClass = params.get("class");
         const urlSubject = params.get("subject");
         const urlChapter = params.get("chapter");
@@ -54,6 +58,7 @@ export default function WorksheetList({
         const initialSubj = urlSubject || (initialSubject && initialSubject !== "All" ? initialSubject : "All");
 
         return {
+          academicYear: urlAcademicYear || "All",
           class: initialClass,
           subject: initialSubj,
           chapter: urlChapter || "All",
@@ -66,6 +71,7 @@ export default function WorksheetList({
     }
 
     return {
+      academicYear: "All",
       class: selectedGrade && selectedGrade.trim() !== "" ? selectedGrade : "All",
       subject: initialSubject && initialSubject !== "All" ? initialSubject : "All",
       chapter: "All",
@@ -103,6 +109,13 @@ export default function WorksheetList({
 
     try {
       const params = new URLSearchParams(window.location.search);
+
+      // Preserve independent Academic Year filter
+      if (filters.academicYear && filters.academicYear !== "All") {
+        params.set("year", filters.academicYear);
+      } else {
+        params.delete("year");
+      }
 
       // Preserve class
       if (filters.class && filters.class !== "All") {
@@ -161,13 +174,14 @@ export default function WorksheetList({
   useEffect(() => {
     if (selectedGrade !== undefined) {
       const targetClass = selectedGrade && selectedGrade.trim() !== "" ? selectedGrade : "All";
-      setFilters({
+      setFilters((prev) => ({
+        academicYear: prev.academicYear,
         class: targetClass,
         subject: "All",
         chapter: "All",
         topic: "All",
         type: "All",
-      });
+      }));
     }
   }, [selectedGrade]);
 
@@ -196,49 +210,73 @@ export default function WorksheetList({
   // available chapters, available topics, available file types & stats.
   // ============================================================
 
+  // Global Academic Year options are derived dynamically from MASTER.
+  // No year values are hardcoded in the frontend.
+  const academicYearData = useMemo(() => {
+    return getAcademicYearCounts(worksheets);
+  }, [worksheets]);
+
+  // Hierarchy counts are scoped by the selected year while the hierarchy
+  // itself remains unchanged: Kelas -> Mapel -> Bab -> Topik -> Jenis File.
+  const yearScopedWorksheets = useMemo(() => {
+    return filterWorksheetsByAcademicYear(
+      worksheets,
+      filters.academicYear
+    );
+  }, [worksheets, filters.academicYear]);
+
   // 1. Classes with counts
   const classData = useMemo(() => {
-    return getClassCounts(worksheets);
-  }, [worksheets]);
+    return getClassCounts(yearScopedWorksheets);
+  }, [yearScopedWorksheets]);
 
   // 2. Subjects with counts for selected class
   const subjectData = useMemo(() => {
-    if (!isClassSelected) return { list: [], total: worksheets.length };
-    return getSubjectCounts(worksheets, filters.class);
-  }, [worksheets, filters.class, isClassSelected]);
+    if (!isClassSelected) return { list: [], total: yearScopedWorksheets.length };
+    return getSubjectCounts(yearScopedWorksheets, filters.class);
+  }, [yearScopedWorksheets, filters.class, isClassSelected]);
 
   // 3. Chapters with counts for selected class & subject
   const chapterData = useMemo(() => {
     if (!isSubjectSelected) return { list: [], total: 0 };
-    return getChapterCounts(worksheets, filters.class, filters.subject);
-  }, [worksheets, filters.class, filters.subject, isSubjectSelected]);
+    return getChapterCounts(yearScopedWorksheets, filters.class, filters.subject);
+  }, [yearScopedWorksheets, filters.class, filters.subject, isSubjectSelected]);
 
   // 4. Topics with counts for selected class, subject & chapter
   const topicData = useMemo(() => {
     if (!isChapterSelected) return { list: [], total: 0 };
-    return getTopicCounts(worksheets, filters.class, filters.subject, filters.chapter);
-  }, [worksheets, filters.class, filters.subject, filters.chapter, isChapterSelected]);
+    return getTopicCounts(yearScopedWorksheets, filters.class, filters.subject, filters.chapter);
+  }, [yearScopedWorksheets, filters.class, filters.subject, filters.chapter, isChapterSelected]);
 
   // 5. Types with counts for selected class, subject, chapter & topic
   const typeData = useMemo(() => {
     if (!isTopicSelected) return { list: [], total: 0 };
-    return getTypeCounts(worksheets, filters.class, filters.subject, filters.chapter, filters.topic);
-  }, [worksheets, filters.class, filters.subject, filters.chapter, filters.topic, isTopicSelected]);
+    return getTypeCounts(yearScopedWorksheets, filters.class, filters.subject, filters.chapter, filters.topic);
+  }, [yearScopedWorksheets, filters.class, filters.subject, filters.chapter, filters.topic, isTopicSelected]);
 
   // ============================================================
   // STRICT ATOMIC FILTER RESET HANDLERS
   // Changing a parent filter strictly resets all child filters to "All"
   // ============================================================
 
+  // Independent global dimension: changing year keeps the content hierarchy.
+  const handleAcademicYearChange = (newAcademicYear: string) => {
+    setFilters((prev) => ({
+      ...prev,
+      academicYear: newAcademicYear,
+    }));
+  };
+
   // Level 1: Kelas change -> resets Subject, Chapter, Topic, Type
   const handleClassChange = (newClass: string) => {
-    setFilters({
+    setFilters((prev) => ({
+      academicYear: prev.academicYear,
       class: newClass,
       subject: "All",
       chapter: "All",
       topic: "All",
       type: "All",
-    });
+    }));
     if (onGradeChange) onGradeChange(newClass === "All" ? "" : newClass);
   };
 
@@ -283,6 +321,7 @@ export default function WorksheetList({
   // Reset all filters to default
   const handleResetFilters = () => {
     setFilters({
+      academicYear: "All",
       class: "All",
       subject: "All",
       chapter: "All",
@@ -298,6 +337,7 @@ export default function WorksheetList({
   // ============================================================
   const filterCriteria: FilterCriteria = useMemo(
     () => ({
+      selectedAcademicYear: filters.academicYear,
       selectedClass: filters.class,
       selectedSubject: filters.subject,
       selectedChapter: filters.chapter,
@@ -341,11 +381,13 @@ export default function WorksheetList({
       <ResourceFinder
         filters={filters}
         searchQuery={searchQuery}
+        academicYearData={academicYearData}
         classData={classData}
         subjectData={subjectData}
         chapterData={chapterData}
         topicData={topicData}
         typeData={typeData}
+        onAcademicYearChange={handleAcademicYearChange}
         onClassChange={handleClassChange}
         onSubjectChange={handleSubjectChange}
         onChapterChange={handleChapterChange}
@@ -367,6 +409,7 @@ export default function WorksheetList({
       <ActiveFilterBreadcrumb
         filters={filters}
         searchQuery={searchQuery}
+        onClearAcademicYear={() => handleAcademicYearChange("All")}
         onClearClass={() => handleClassChange("All")}
         onClearSubject={() => handleSubjectChange("All")}
         onClearChapter={() => handleChapterChange("All")}
@@ -388,6 +431,15 @@ export default function WorksheetList({
 
           {/* Breadcrumb Path */}
           <div className="flex items-center flex-wrap gap-1.5 text-xs sm:text-sm font-black text-slate-900">
+            {filters.academicYear !== "All" && (
+              <>
+                <span className="text-violet-700">
+                  TA {filters.academicYear}
+                </span>
+                <span className="text-slate-300 font-normal">›</span>
+              </>
+            )}
+
             <span className="inline-flex items-center gap-1 text-blue-700">
               <GraduationCap className="h-4 w-4 text-blue-600 shrink-0" />
               {isClassSelected ? `Kelas ${filters.class}` : "Semua Kelas"}

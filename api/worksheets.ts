@@ -214,6 +214,21 @@ function standardizeData(data: unknown[]) {
           item.Contributor ||
           findVal(["uploader", "teacher", "contributor", "pengunggah"]),
       );
+      const academicYear = clean(
+        item.academicYear ||
+          item.AcademicYear ||
+          item.academic_year ||
+          item.Academic_Year ||
+          item["Academic Year"] ||
+          item["Tahun Ajaran"] ||
+          findVal([
+            "academic_year",
+            "academic year",
+            "academicyear",
+            "tahun ajaran",
+            "tahun_ajaran",
+          ]),
+      );
 
       return {
         ...item,
@@ -226,6 +241,7 @@ function standardizeData(data: unknown[]) {
         type,
         link,
         ...(uploader ? { uploader } : {}),
+        ...(academicYear ? { academicYear } : {}),
         targetClasses: normalizeTargetClasses(item.targetClasses, grade),
       };
     })
