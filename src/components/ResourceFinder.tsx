@@ -390,9 +390,13 @@ export default function ResourceFinder({
             aria-label="Cari lembar kerja atau materi berdasarkan kata kunci, topik, mata pelajaran, atau bab"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search resources by keyword, topic, subject, or chapter..."
+            placeholder="Cari materi, topik, mapel, atau nama pengunggah..."
             className="w-full min-h-[44px] rounded-xl border border-slate-300 bg-slate-50/70 pl-10 pr-10 py-2.5 text-xs sm:text-sm font-semibold text-slate-900 placeholder:text-slate-400 transition-colors focus-visible:border-blue-500 focus-visible:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
           />
+              <p className="mt-2 text-xs text-slate-500">
+                Penyaringan bisa dilakukan dengan menggunakan beberapa kata kunci sekaligus yang dipisahkan dengan tanda titik koma (;). Contoh:{" "}
+                <span className="font-medium">penjumlahan; word problem; Istiqomah</span>
+              </p>
           {searchQuery && (
             <button
               type="button"

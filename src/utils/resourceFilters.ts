@@ -428,7 +428,10 @@ export function filterAndSearchWorksheets(
   worksheets: Worksheet[],
   criteria: FilterCriteria
 ): Worksheet[] {
-  const query = normalizeCompare(criteria.searchQuery);
+  const queries = String(criteria.searchQuery ?? "")
+    .split(";")
+    .map((part) => normalizeCompare(part))
+    .filter(Boolean);
   const sClass = criteria.selectedClass;
   const sSubject = normalizeCompare(criteria.selectedSubject);
   const sChapter = normalizeCompare(criteria.selectedChapter);
@@ -465,28 +468,31 @@ export function filterAndSearchWorksheets(
       if (wType !== sType) return false;
     }
 
-    // 6. Search Query (Case-insensitive across all searchable fields)
-    if (query) {
-      const sSubjectText = normalizeCompare(w.subject);
-      const sChapterText = normalizeCompare(w.chapter);
-      const sTopicText = normalizeCompare(w.topic);
-      const sTaskNameText = normalizeCompare(w.taskName);
-      const sGradeText = normalizeCompare(w.grade);
-      const sTypeText = normalizeCompare(w.type);
-      const sIdText = normalizeCompare(w.id);
-      const sUploaderText = normalizeCompare(w.uploader);
+    // 6. Search Query
+    // Supports multi-keyword AND search using ";" as separator.
+    //
+    // Example:
+    //   those; he/she/it; keneswangi
+    //
+    // A resource must match ALL keywords, but each keyword may match
+    // a different searchable field.
+    if (queries.length > 0) {
+      const searchableFields = [
+        normalizeCompare(w.subject),
+        normalizeCompare(w.chapter),
+        normalizeCompare(w.topic),
+        normalizeCompare(w.taskName),
+        normalizeCompare(w.grade),
+        normalizeCompare(w.type),
+        normalizeCompare(w.id),
+        normalizeCompare(w.uploader),
+      ];
 
-      const match =
-        sSubjectText.includes(query) ||
-        sChapterText.includes(query) ||
-        sTopicText.includes(query) ||
-        sTaskNameText.includes(query) ||
-        sGradeText.includes(query) ||
-        sTypeText.includes(query) ||
-        sIdText.includes(query) ||
-        sUploaderText.includes(query);
+      const matchAllKeywords = queries.every((query) =>
+        searchableFields.some((field) => field.includes(query))
+      );
 
-      if (!match) return false;
+      if (!matchAllKeywords) return false;
     }
 
     return true;
