@@ -381,33 +381,36 @@ export default function ResourceFinder({
       {/* ============================================================
           KEYWORD SEARCH BAR & RESET BAR (RULE 23)
          ============================================================ */}
-      <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
-        <div className="relative flex-1 w-full">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-          <input
-            type="text"
-            id="search-input"
-            aria-label="Cari lembar kerja atau materi berdasarkan kata kunci, topik, mata pelajaran, atau bab"
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Cari materi, topik, mapel, atau nama pengunggah..."
-            className="w-full min-h-[44px] rounded-xl border border-slate-300 bg-slate-50/70 pl-10 pr-10 py-2.5 text-xs sm:text-sm font-semibold text-slate-900 placeholder:text-slate-400 transition-colors focus-visible:border-blue-500 focus-visible:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
-          />
-              <p className="mt-2 text-xs text-slate-500">
-                Penyaringan bisa dilakukan dengan menggunakan beberapa kata kunci sekaligus yang dipisahkan dengan tanda titik koma (;). Contoh:{" "}
-                <span className="font-medium">penjumlahan; word problem; Istiqomah</span>
-              </p>
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => onSearchChange("")}
-              aria-label="Hapus kata kunci pencarian"
-              className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-all cursor-pointer min-h-[32px] min-w-[32px] flex items-center justify-center focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:outline-none"
-              title="Hapus kata kunci"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
+      <div className="flex flex-col sm:flex-row items-start gap-3 pt-2">
+        <div className="flex-1 w-full">
+          <div className="relative">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              id="search-input"
+              aria-label="Cari lembar kerja atau materi berdasarkan kata kunci, topik, mata pelajaran, bab, atau pengunggah"
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="Cari materi, topik, mapel, atau nama pengunggah..."
+              className="w-full min-h-[44px] rounded-xl border border-slate-300 bg-slate-50/70 pl-10 pr-10 py-2.5 text-xs sm:text-sm font-semibold text-slate-900 placeholder:text-slate-400 transition-colors focus-visible:border-blue-500 focus-visible:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => onSearchChange("")}
+                aria-label="Hapus kata kunci pencarian"
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-all cursor-pointer min-h-[32px] min-w-[32px] flex items-center justify-center focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:outline-none"
+                title="Hapus kata kunci"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          <p className="mt-2 pl-1 text-[11px] sm:text-xs leading-relaxed text-slate-500">
+            Pencarian mendukung beberapa kata kunci sekaligus. Pisahkan dengan titik koma (;).<br /> Contoh:{" "}
+            <span className="font-medium text-slate-600">untuk mencari file tentang <b> Review yang diampu Mr Sony </b> maka kata kuncinya: <b> review; Sony </b></span>
+          </p>
         </div>
 
         <button
