@@ -474,6 +474,7 @@ export function filterAndSearchWorksheets(
       const sGradeText = normalizeCompare(w.grade);
       const sTypeText = normalizeCompare(w.type);
       const sIdText = normalizeCompare(w.id);
+      const sUploaderText = normalizeCompare(w.uploader);
 
       const match =
         sSubjectText.includes(query) ||
@@ -482,7 +483,8 @@ export function filterAndSearchWorksheets(
         sTaskNameText.includes(query) ||
         sGradeText.includes(query) ||
         sTypeText.includes(query) ||
-        sIdText.includes(query);
+        sIdText.includes(query) ||
+        sUploaderText.includes(query);
 
       if (!match) return false;
     }
