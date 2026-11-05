@@ -6,7 +6,7 @@
  * data from Google Sheets into JSON format.
  *
  * Database Header:
- * ID | Grade | Subject | Chapter | Topic | Task_Name | Type | Link | Uploader | Academic_Year
+ * ID | Grade | Subject | Chapter | Topic | Task_Name | Type | Link | Uploader | Academic_Year | Semester
  *
  * Grade values preserved as exact raw string (e.g. "6 MQ", "6 Inter - 6 MQ").
  * Does not split database rows in Code.gs. Frontend handles target-class parsing.
@@ -94,7 +94,8 @@ function parseRow(row, rawHeaders, normalizedHeaders) {
     type: "",
     link: "",
     uploader: "",
-    academicYear: ""
+    academicYear: "",
+    semester: ""
   };
   var hasContent = false;
 
@@ -132,6 +133,8 @@ function parseRow(row, rawHeaders, normalizedHeaders) {
       obj.uploader = strVal;
     } else if (key === "academicYear") {
       obj.academicYear = strVal;
+    } else if (key === "semester") {
+      obj.semester = strVal;
     } else if (rawKey !== "") {
       // Preserve custom extra columns with lowercase keys
       obj[rawKey.toLowerCase()] = val;
@@ -158,6 +161,9 @@ function normalizeHeader(header) {
   if (/^(link|url)$/i.test(text)) return "link";
   if (/^(academic_year|academic year|academicyear|tahun ajaran|tahun_ajaran)$/i.test(text)) {
     return "academicYear";
+  }
+  if (/^(semester|sem)$/i.test(text)) {
+    return "semester";
   }
 
   // Uploader is now a first-class NEO ILMA field.

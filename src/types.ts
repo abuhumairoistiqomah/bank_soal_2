@@ -15,6 +15,7 @@ export interface Worksheet {
   link: string; // Resource URL
   uploader?: string;
   academicYear?: string; // Tahun ajaran canonical: YYYY-YYYY
+  semester?: string; // Canonical: "1", "2", or blank for general/universal material.
   targetClasses?: string[];
 }
 

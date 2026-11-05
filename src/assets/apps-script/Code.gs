@@ -322,6 +322,8 @@ function parseRow(
 
     topic: "",
 
+    semester: "",
+
     type: "",
 
     link: ""
@@ -423,6 +425,13 @@ function parseRow(
     else if (key === "topic") {
 
       obj.topic = strValue;
+
+    }
+
+
+    else if (key === "semester") {
+
+      obj.semester = strValue;
 
     }
 
@@ -810,6 +819,17 @@ function normalizeHeader(header) {
   ) {
 
     return "topic";
+
+  }
+
+
+  // Semester
+  if (
+    text === "semester" ||
+    text === "sem"
+  ) {
+
+    return "semester";
 
   }
 

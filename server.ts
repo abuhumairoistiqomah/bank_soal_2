@@ -155,6 +155,15 @@ app.get("/api/worksheets", async (req, res) => {
             "tahun_ajaran"
           ], "");
 
+        // Semester is first-class in NEO ILMA V3.
+        // Canonical database values are "1", "2", or blank.
+        const rawSemester =
+          item.semester ??
+          item.Semester ??
+          item.sem ??
+          item.Sem ??
+          findKeyVal(["semester", "sem"], "");
+
         // Normalize grade as String: handle legacy bare single digits if needed, while keeping full strings intact
         let cleanGrade = rawGrade || "1 Inter";
         if (/^[1-6]$/.test(cleanGrade)) {
@@ -174,6 +183,7 @@ app.get("/api/worksheets", async (req, res) => {
           link: toSafeString(rawLink, "#"),
           uploader: toSafeString(rawUploader, ""),
           academicYear: toSafeString(rawAcademicYear, ""),
+          semester: toSafeString(rawSemester, ""),
         };
       } catch (rowErr) {
         // Safe row-level fallback so an individual malformed row never crashes the whole response
@@ -189,6 +199,7 @@ app.get("/api/worksheets", async (req, res) => {
           link: "#",
           uploader: "",
           academicYear: "",
+          semester: "",
         };
       }
     }).filter((item: any) => item !== null && (item.id || item.link));

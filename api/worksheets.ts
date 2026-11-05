@@ -229,6 +229,13 @@ function standardizeData(data: unknown[]) {
             "tahun_ajaran",
           ]),
       );
+      const semester = clean(
+        item.semester ||
+          item.Semester ||
+          item.sem ||
+          item.Sem ||
+          findVal(["semester", "sem"]),
+      );
 
       return {
         ...item,
@@ -242,6 +249,7 @@ function standardizeData(data: unknown[]) {
         link,
         ...(uploader ? { uploader } : {}),
         ...(academicYear ? { academicYear } : {}),
+        ...(semester ? { semester } : {}),
         targetClasses: normalizeTargetClasses(item.targetClasses, grade),
       };
     })

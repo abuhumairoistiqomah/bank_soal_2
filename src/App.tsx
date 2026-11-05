@@ -6,16 +6,30 @@ import React, {
 } from "react";
 import Header from "./components/Header";
 import DashboardStats from "./components/DashboardStats";
+import DataFreshnessBar from "./components/DataFreshnessBar";
+import MyClassesPanel from "./components/MyClassesPanel";
+import ClassSelectionDialog from "./components/ClassSelectionDialog";
+import ClassRequiredState from "./components/ClassRequiredState";
 import WorksheetList from "./components/WorksheetList";
 import SettingsPanel from "./components/SettingsPanel";
 import type { Worksheet } from "./types";
 import { AlertCircle, RefreshCw } from "lucide-react";
+import {
+  activateClassPreference,
+  addClassPreference,
+  readClassPreferences,
+  removeClassPreference,
+  writeClassPreferences,
+  type ClassPreferences,
+} from "./utils/classPreferences";
+import { shouldShowClassSelectionGate } from "./utils/classSelection";
 
 const GAS_URL_STORAGE_KEY = "neo_ilma_gas_url";
 
 // New cache version, while still being able to read older last-good caches.
-const RESOURCE_CACHE_KEY = "neo_ilma_resource_cache_v4";
+const RESOURCE_CACHE_KEY = "neo_ilma_resource_cache_v5";
 const LEGACY_RESOURCE_CACHE_KEYS = [
+  "neo_ilma_resource_cache_v4",
   "neo_ilma_resource_cache_v3",
   "neo_ilma_resource_cache_v2",
   "neo_ilma_resource_cache_v1",
@@ -203,8 +217,57 @@ export default function App() {
   const [activeView, setActiveView] =
     useState<"dashboard" | "settings">("dashboard");
 
+  const initialClassPreferencesRef =
+    useRef<ClassPreferences | null>(null);
+
+  if (initialClassPreferencesRef.current === null) {
+    const storedPreferences =
+      readClassPreferences();
+
+    let initialPreferences =
+      storedPreferences;
+
+    if (typeof window !== "undefined") {
+      try {
+        const params =
+          new URLSearchParams(
+            window.location.search,
+          );
+
+        const urlClass =
+          params.get("class");
+
+        if (urlClass) {
+          initialPreferences =
+            activateClassPreference(
+              storedPreferences,
+              urlClass.replace(
+                /-/g,
+                " ",
+              ),
+            );
+        }
+      } catch {
+        // Fall back to local family preferences.
+      }
+    }
+
+    initialClassPreferencesRef.current =
+      initialPreferences;
+  }
+
+  const initialClassPreferences =
+    initialClassPreferencesRef.current;
+
+  const [savedClasses, setSavedClasses] =
+    useState<string[]>(
+      () => initialClassPreferences.savedClasses,
+    );
+
   const [selectedClass, setSelectedClass] =
-    useState<string | undefined>(undefined);
+    useState<string | undefined>(
+      () => initialClassPreferences.activeClass,
+    );
 
   const [gasUrl, setGasUrl] =
     useState<string>(() => getInitialGasUrl());
@@ -275,6 +338,17 @@ export default function App() {
   useEffect(() => {
     lastUpdatedAtRef.current = lastUpdatedAt;
   }, [lastUpdatedAt]);
+
+  // V3.2 — Persist the family class profile locally.
+  // No account or server-side personal data is required.
+  useEffect(() => {
+    writeClassPreferences({
+      savedClasses,
+      ...(selectedClass
+        ? { activeClass: selectedClass }
+        : {}),
+    });
+  }, [savedClasses, selectedClass]);
 
   const fetchWorksheets = useCallback(
     async (
@@ -639,39 +713,69 @@ export default function App() {
     };
 
   /**
-   * Class selection from Browse by Program.
+   * V3.2 — "Kelas Anak Saya" state.
    *
-   * IMPORTANT:
-   * - Class stays a complete string: "5 MQ", "6 MQ", "7 AE", etc.
-   * - No Number(), parseInt(), or numeric conversion.
-   * - We stay on the same Dashboard page.
-   * - WorksheetList receives the selected class through `selectedGrade`.
+   * Any valid class selected from the existing Browse-by-Program /
+   * Resource Finder is also remembered locally. This keeps the stable V2
+   * navigation compatible with the new family profile instead of creating
+   * two competing notions of an active class.
    */
-  const handleClassClick = (
+  const applyClassPreferences = (
+    next: ClassPreferences,
+  ) => {
+    setSavedClasses(next.savedClasses);
+    setSelectedClass(next.activeClass);
+  };
+
+  const activateAndRememberClass = (
     className: string,
+    scrollToResources = false,
   ) => {
     const normalizedClass =
       String(className ?? "").trim();
 
-    setSelectedClass(
-      normalizedClass || undefined,
+    if (!normalizedClass) {
+      setSelectedClass(undefined);
+      return;
+    }
+
+    const next = activateClassPreference(
+      {
+        savedClasses,
+        ...(selectedClass
+          ? { activeClass: selectedClass }
+          : {}),
+      },
+      normalizedClass,
     );
 
+    applyClassPreferences(next);
     setActiveView("dashboard");
 
-    window.setTimeout(() => {
-      const section =
-        document.getElementById(
-          "worksheet-list-section",
-        );
+    if (scrollToResources) {
+      window.setTimeout(() => {
+        const section =
+          document.getElementById(
+            "worksheet-list-section",
+          );
 
-      if (section) {
-        section.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
-      }
-    }, 80);
+        if (section) {
+          section.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+        }
+      }, 80);
+    }
+  };
+
+  const handleClassClick = (
+    className: string,
+  ) => {
+    activateAndRememberClass(
+      className,
+      true,
+    );
   };
 
   const handleClassFilterChange = (
@@ -680,9 +784,59 @@ export default function App() {
     const normalizedClass =
       String(className ?? "").trim();
 
-    setSelectedClass(
-      normalizedClass || undefined,
+    if (!normalizedClass) {
+      // Clearing the V2 class filter clears only the active class.
+      // Saved family classes remain available as quick-switch chips.
+      setSelectedClass(undefined);
+      return;
+    }
+
+    activateAndRememberClass(
+      normalizedClass,
+      false,
     );
+  };
+
+  const handleAddMyClass = (
+    className: string,
+  ) => {
+    const next = addClassPreference(
+      {
+        savedClasses,
+        ...(selectedClass
+          ? { activeClass: selectedClass }
+          : {}),
+      },
+      className,
+      true,
+    );
+
+    applyClassPreferences(next);
+  };
+
+  const handleActivateMyClass = (
+    className: string,
+  ) => {
+    activateAndRememberClass(
+      className,
+      true,
+    );
+  };
+
+  const handleRemoveMyClass = (
+    className: string,
+  ) => {
+    const next = removeClassPreference(
+      {
+        savedClasses,
+        ...(selectedClass
+          ? { activeClass: selectedClass }
+          : {}),
+      },
+      className,
+    );
+
+    applyClassPreferences(next);
   };
 
   const handleViewChange = (
@@ -696,11 +850,34 @@ export default function App() {
     setActiveView("dashboard");
   };
 
+  const requiresClassSelection =
+    activeView === "dashboard" &&
+    shouldShowClassSelectionGate(
+      selectedClass,
+    );
+
+  const handleGuidedClassSelect = (
+    className: string,
+  ) => {
+    activateAndRememberClass(
+      className,
+      false,
+    );
+  };
+
   return (
     <div
       id="neo-ilma-root"
       className="min-h-screen bg-slate-50 font-sans text-slate-800 antialiased selection:bg-blue-100 selection:text-blue-900"
     >
+      <ClassSelectionDialog
+        open={requiresClassSelection}
+        savedClasses={savedClasses}
+        onSelectClass={
+          handleGuidedClassSelect
+        }
+      />
+
       <Header
         activeView={activeView}
         onViewChange={handleViewChange}
@@ -772,6 +949,41 @@ export default function App() {
             {activeView ===
               "dashboard" && (
               <div className="space-y-8">
+                <DataFreshnessBar
+                  lastUpdatedAt={
+                    lastUpdatedAt
+                  }
+                  isRefreshing={
+                    refreshing
+                  }
+                />
+
+                <MyClassesPanel
+                  savedClasses={savedClasses}
+                  activeClass={selectedClass}
+                  onAddClass={handleAddMyClass}
+                  onActivateClass={handleActivateMyClass}
+                  onRemoveClass={handleRemoveMyClass}
+                />
+
+                <div className="border-t border-slate-200/60 pt-6">
+                  {selectedClass ? (
+                    <WorksheetList
+                      worksheets={
+                        worksheets
+                      }
+                      selectedGrade={
+                        selectedClass
+                      }
+                      onGradeChange={
+                        handleClassFilterChange
+                      }
+                    />
+                  ) : (
+                    <ClassRequiredState />
+                  )}
+                </div>
+
                 <DashboardStats
                   worksheets={
                     worksheets
@@ -782,27 +994,7 @@ export default function App() {
                   onGradeClick={
                     handleClassClick
                   }
-                  lastUpdatedAt={
-                    lastUpdatedAt
-                  }
-                  isRefreshing={
-                    refreshing
-                  }
                 />
-
-                <div className="border-t border-slate-200/60 pt-6">
-                  <WorksheetList
-                    worksheets={
-                      worksheets
-                    }
-                    selectedGrade={
-                      selectedClass
-                    }
-                    onGradeChange={
-                      handleClassFilterChange
-                    }
-                  />
-                </div>
               </div>
             )}
 

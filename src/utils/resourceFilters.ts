@@ -9,6 +9,7 @@ import {
   resourceMatchesClass,
   formatGradeDisplay,
 } from "./classTargets";
+import { normalizeSemester, resourceMatchesSemester } from "./smartContext";
 
 // Direct alias references for internal & external compatibility
 export const parseClassesFromGrade = getTargetClasses;
@@ -116,6 +117,7 @@ export function normalizeCompare(val: unknown): string {
 
 export interface FilterCriteria {
   selectedAcademicYear?: string; // Independent global dimension; "All" or YYYY-YYYY
+  selectedSemester?: string; // Optional V3 context: "1", "2", or "All". Blank resources are universal.
   selectedClass: string; // "All" or e.g. "3 INTER", "6 MQ", "8 MQ"
   selectedSubject: string; // "All" or string
   selectedChapter: string; // "All" or string
@@ -405,6 +407,166 @@ export function getAvailableTypes(
   return getTypeCounts(worksheets, selectedClass, selectedSubject, selectedChapter, selectedTopic).list.map((item) => item.name);
 }
 
+export type ResourceSortMode =
+  | "newest"
+  | "oldest"
+  | "title"
+  | "hierarchy";
+
+export function getWorksheetNumericId(
+  id: unknown,
+): number | null {
+  const text =
+    String(id ?? "").trim();
+
+  if (!text) return null;
+
+  const match =
+    text.match(/(\d+)(?!.*\d)/);
+
+  if (!match) return null;
+
+  const value =
+    Number(match[1]);
+
+  return Number.isFinite(value)
+    ? value
+    : null;
+}
+
+function compareWorksheetIds(
+  a: Worksheet,
+  b: Worksheet,
+  descending: boolean,
+): number {
+  const idA =
+    getWorksheetNumericId(a.id);
+
+  const idB =
+    getWorksheetNumericId(b.id);
+
+  if (
+    idA !== null &&
+    idB !== null &&
+    idA !== idB
+  ) {
+    return descending
+      ? idB - idA
+      : idA - idB;
+  }
+
+  if (
+    idA !== null &&
+    idB === null
+  ) {
+    return -1;
+  }
+
+  if (
+    idA === null &&
+    idB !== null
+  ) {
+    return 1;
+  }
+
+  const rawA =
+    String(a.id ?? "");
+
+  const rawB =
+    String(b.id ?? "");
+
+  return descending
+    ? rawB.localeCompare(
+        rawA,
+        "id",
+        { numeric: true },
+      )
+    : rawA.localeCompare(
+        rawB,
+        "id",
+        { numeric: true },
+      );
+}
+
+export function sortWorksheetsByMode(
+  worksheets: Worksheet[],
+  mode: ResourceSortMode,
+  selectedClass?: string,
+): Worksheet[] {
+  if (mode === "hierarchy") {
+    return sortWorksheetsHierarchically(
+      worksheets,
+      selectedClass,
+    );
+  }
+
+  if (mode === "newest") {
+    return [...worksheets].sort(
+      (a, b) =>
+        compareWorksheetIds(
+          a,
+          b,
+          true,
+        ),
+    );
+  }
+
+  if (mode === "oldest") {
+    return [...worksheets].sort(
+      (a, b) =>
+        compareWorksheetIds(
+          a,
+          b,
+          false,
+        ),
+    );
+  }
+
+  return [...worksheets].sort(
+    (a, b) => {
+      const titleA =
+        normalizeTaskName(
+          a.taskName,
+        ) ||
+        normalizeTopic(
+          a.topic,
+        ) ||
+        normalizeChapter(
+          a.chapter,
+        );
+
+      const titleB =
+        normalizeTaskName(
+          b.taskName,
+        ) ||
+        normalizeTopic(
+          b.topic,
+        ) ||
+        normalizeChapter(
+          b.chapter,
+        );
+
+      const result =
+        titleA.localeCompare(
+          titleB,
+          "id",
+          { numeric: true },
+        );
+
+      if (result !== 0) {
+        return result;
+      }
+
+      return compareWorksheetIds(
+        a,
+        b,
+        true,
+      );
+    },
+  );
+}
+
+
 /**
  * ============================================================
  * 40. RESOURCE SORTING HELPER
@@ -481,6 +643,7 @@ export function filterAndSearchWorksheets(
     .map((part) => normalizeCompare(part))
     .filter(Boolean);
   const sAcademicYear = normalizeCompare(criteria.selectedAcademicYear);
+  const sSemester = normalizeCompare(criteria.selectedSemester);
   const sClass = criteria.selectedClass;
   const sSubject = normalizeCompare(criteria.selectedSubject);
   const sChapter = normalizeCompare(criteria.selectedChapter);
@@ -492,6 +655,11 @@ export function filterAndSearchWorksheets(
     if (sAcademicYear && sAcademicYear !== "all") {
       const wAcademicYear = normalizeCompare(normalizeAcademicYear(w.academicYear));
       if (wAcademicYear !== sAcademicYear) return false;
+    }
+
+    // V3 Semester context. Blank resource Semester is UNIVERSAL and matches either 1 or 2.
+    if (sSemester && sSemester !== "all") {
+      if (!resourceMatchesSemester(w.semester, sSemester)) return false;
     }
 
     // 1. Class filter: matches if target class is one of the assigned classes in w.grade
@@ -542,6 +710,11 @@ export function filterAndSearchWorksheets(
         normalizeCompare(w.id),
         normalizeCompare(w.uploader),
         normalizeCompare(normalizeAcademicYear(w.academicYear)),
+        normalizeCompare(
+          normalizeSemester(w.semester)
+            ? `semester ${normalizeSemester(w.semester)}`
+            : "semester umum"
+        ),
       ];
 
       const matchAllKeywords = queries.every((query) =>

@@ -10,6 +10,8 @@ import {
   getAvailableChapters,
   getAvailableTopics,
   getClassCounts,
+  getWorksheetNumericId,
+  sortWorksheetsByMode,
 } from "../src/utils/resourceFilters";
 import {
   resolveClassName,
@@ -19,6 +21,27 @@ import {
   ALL_SCHOOL_CLASSES,
 } from "../src/utils/classConfig";
 import { Worksheet } from "../src/types";
+import {
+  getAcademicYearForDate,
+  getSemesterForDate,
+  getSmartLearningContext,
+  filterWorksheetsBySmartContext,
+  resourceMatchesSemester,
+} from "../src/utils/smartContext";
+import {
+  activateClassPreference,
+  addClassPreference,
+  normalizeSavedClasses,
+  removeClassPreference,
+  sanitizeClassPreferences,
+} from "../src/utils/classPreferences";
+import {
+  getGuidedDefaultClass,
+  shouldShowClassSelectionGate,
+} from "../src/utils/classSelection";
+import {
+  getSubjectHomeData,
+} from "../src/utils/subjectHome";
 
 let passed = 0;
 let failed = 0;
@@ -301,6 +324,423 @@ assert(
   formattedMulti === "6 Inter · 6 MQ",
   "Display Format — '6 Inter - 6 MQ' formats as '6 Inter · 6 MQ'",
   `Got: ${formattedMulti}`
+);
+
+// ==================================================
+// V3.1 — SEMESTER + SMART CONTEXT FOUNDATION
+// ==================================================
+console.log("\n--- V3.1: SMART CONTEXT FOUNDATION ---");
+
+assert(
+  getAcademicYearForDate(new Date(2026, 9, 18)) === "2026-2027",
+  "V3.1 — October 2026 resolves Academic Year 2026-2027"
+);
+
+assert(
+  getAcademicYearForDate(new Date(2027, 1, 10)) === "2026-2027",
+  "V3.1 — February 2027 remains Academic Year 2026-2027"
+);
+
+assert(
+  getSemesterForDate(new Date(2026, 9, 18)) === "1",
+  "V3.1 — July-December resolves Semester 1"
+);
+
+assert(
+  getSemesterForDate(new Date(2027, 1, 10)) === "2",
+  "V3.1 — January-June resolves Semester 2"
+);
+
+assert(
+  resourceMatchesSemester("", "1") &&
+    resourceMatchesSemester("", "2"),
+  "V3.1 — Blank Semester is universal in both semesters"
+);
+
+assert(
+  resourceMatchesSemester("1", "1") &&
+    !resourceMatchesSemester("2", "1"),
+  "V3.1 — Semester 1 context excludes Semester 2"
+);
+
+const v31ContextDb: Worksheet[] = [
+  {
+    id: "V31-1",
+    grade: "5 Inter",
+    subject: "Math",
+    chapter: "A",
+    topic: "A",
+    type: "PDF",
+    link: "#1",
+    academicYear: "2026-2027",
+    semester: "1",
+  },
+  {
+    id: "V31-2",
+    grade: "5 Inter",
+    subject: "Science",
+    chapter: "B",
+    topic: "B",
+    type: "PDF",
+    link: "#2",
+    academicYear: "2026-2027",
+    semester: "2",
+  },
+  {
+    id: "V31-3",
+    grade: "5 Inter",
+    subject: "English",
+    chapter: "C",
+    topic: "C",
+    type: "PDF",
+    link: "#3",
+    academicYear: "2026-2027",
+    semester: "",
+  },
+  {
+    id: "V31-4",
+    grade: "4 Inter",
+    subject: "Math",
+    chapter: "D",
+    topic: "D",
+    type: "PDF",
+    link: "#4",
+    academicYear: "2026-2027",
+    semester: "1",
+  },
+  {
+    id: "V31-5",
+    grade: "5 Inter",
+    subject: "Math",
+    chapter: "E",
+    topic: "E",
+    type: "PDF",
+    link: "#5",
+    academicYear: "2025-2026",
+    semester: "1",
+  },
+];
+
+const v31Context = getSmartLearningContext(new Date(2026, 9, 18));
+const v31Filtered = filterWorksheetsBySmartContext(v31ContextDb, {
+  ...v31Context,
+  selectedClass: "5 Inter",
+});
+
+assert(
+  JSON.stringify(v31Filtered.map((item) => item.id).sort()) ===
+    JSON.stringify(["V31-1", "V31-3"]),
+  "V3.1 — Smart Context = Year + Class + active Semester + universal blank",
+  `Found: ${JSON.stringify(v31Filtered.map((item) => item.id))}`
+);
+
+const v31FilterCriteriaResult = filterAndSearchWorksheets(v31ContextDb, {
+  selectedAcademicYear: "2026-2027",
+  selectedSemester: "1",
+  selectedClass: "5 Inter",
+  selectedSubject: "All",
+  selectedChapter: "All",
+  selectedTopic: "All",
+  selectedType: "All",
+  searchQuery: "",
+});
+
+assert(
+  JSON.stringify(v31FilterCriteriaResult.map((item) => item.id).sort()) ===
+    JSON.stringify(["V31-1", "V31-3"]),
+  "V3.1 — Existing filter engine accepts optional Semester without breaking V2",
+  `Found: ${JSON.stringify(v31FilterCriteriaResult.map((item) => item.id))}`
+);
+
+
+
+
+// ============================================================
+// V3.2 — KELAS ANAK SAYA / MULTI-CLASS PREFERENCES
+// ============================================================
+console.log("\n--- V3.2: KELAS ANAK SAYA ---");
+
+const v32Normalized = normalizeSavedClasses([
+  "5 inter",
+  "5 Inter",
+  "7 MQ",
+  "NOT A CLASS",
+]);
+
+assert(
+  JSON.stringify(v32Normalized) ===
+    JSON.stringify(["5 Inter", "7 MQ"]),
+  "V3.2 — saved classes are canonical, unique, and reject invalid classes",
+  `Got: ${JSON.stringify(v32Normalized)}`
+);
+
+const v32Added = addClassPreference(
+  { savedClasses: ["3 Inter"], activeClass: "3 Inter" },
+  "5 Inter",
+  true,
+);
+
+assert(
+  JSON.stringify(v32Added.savedClasses) ===
+    JSON.stringify(["3 Inter", "5 Inter"]) &&
+    v32Added.activeClass === "5 Inter",
+  "V3.2 — adding a class saves and activates it",
+  `Got: ${JSON.stringify(v32Added)}`
+);
+
+const v32Activated = activateClassPreference(
+  v32Added,
+  "7 MQ",
+);
+
+assert(
+  v32Activated.savedClasses.includes("7 MQ") &&
+    v32Activated.activeClass === "7 MQ",
+  "V3.2 — activating a valid new class also remembers it",
+  `Got: ${JSON.stringify(v32Activated)}`
+);
+
+const v32Removed = removeClassPreference(
+  v32Activated,
+  "7 MQ",
+);
+
+assert(
+  !v32Removed.savedClasses.includes("7 MQ") &&
+    v32Removed.activeClass === "3 Inter",
+  "V3.2 — removing the active class falls back to the first saved class",
+  `Got: ${JSON.stringify(v32Removed)}`
+);
+
+const v32Sanitized = sanitizeClassPreferences({
+  savedClasses: ["4 Inter", "6 MQ"],
+  activeClass: "12 AE",
+});
+
+assert(
+  v32Sanitized.activeClass === "4 Inter",
+  "V3.2 — invalid/non-saved active class safely falls back to a saved class",
+  `Got: ${JSON.stringify(v32Sanitized)}`
+);
+
+
+
+// ============================================================
+// V3.3 — GUIDED CLASS SELECTION / RESOURCE GATE
+// ============================================================
+console.log("\n--- V3.3: GUIDED CLASS SELECTION ---");
+
+assert(
+  shouldShowClassSelectionGate(undefined) &&
+    shouldShowClassSelectionGate("") &&
+    !shouldShowClassSelectionGate("5 Inter"),
+  "V3.3 — resource gate is active only while no class is selected",
+);
+
+assert(
+  getGuidedDefaultClass(["5 inter", "7 MQ"]) ===
+    "5 Inter",
+  "V3.3 — guided dialog prefers the first saved family class",
+  `Got: ${getGuidedDefaultClass(["5 inter", "7 MQ"])}`
+);
+
+assert(
+  getGuidedDefaultClass([]) === "1 Inter",
+  "V3.3 — first visit falls back to the first canonical school class",
+  `Got: ${getGuidedDefaultClass([])}`
+);
+
+
+
+// ============================================================
+// V3.4 — SUBJECT HOME
+// ============================================================
+console.log("\n--- V3.4: SUBJECT HOME ---");
+
+const v34Worksheets = [
+  {
+    id: "Q-900001",
+    grade: "5 Inter",
+    subject: "MATH",
+    chapter: "Fractions",
+    topic: "Fractions",
+    taskName: "Math S1",
+    type: "Worksheets PDF",
+    link: "https://example.com/math-s1",
+    academicYear: "2026-2027",
+    semester: "1",
+  },
+  {
+    id: "Q-900002",
+    grade: "5 Inter",
+    subject: "SCIENCE",
+    chapter: "Matter",
+    topic: "Matter",
+    taskName: "Science General",
+    type: "Ringkasan Materi",
+    link: "https://example.com/science-general",
+    academicYear: "2026-2027",
+    semester: "",
+  },
+  {
+    id: "Q-900003",
+    grade: "5 Inter",
+    subject: "ARABIC",
+    chapter: "Vocabulary",
+    topic: "Vocabulary",
+    taskName: "Arabic S2",
+    type: "Worksheets PDF",
+    link: "https://example.com/arabic-s2",
+    academicYear: "2026-2027",
+    semester: "2",
+  },
+  {
+    id: "Q-900004",
+    grade: "5 Inter",
+    subject: "ENGLISH",
+    chapter: "Review",
+    topic: "Review",
+    taskName: "Old English",
+    type: "Worksheets PDF",
+    link: "https://example.com/old-english",
+    academicYear: "2025-2026",
+    semester: "1",
+  },
+  {
+    id: "Q-900005",
+    grade: "4 Inter",
+    subject: "MATH",
+    chapter: "Time",
+    topic: "Time",
+    taskName: "Other Class",
+    type: "Worksheets PDF",
+    link: "https://example.com/other-class",
+    academicYear: "2026-2027",
+    semester: "1",
+  },
+] as any;
+
+const v34SubjectHome =
+  getSubjectHomeData(
+    v34Worksheets,
+    "5 Inter",
+    new Date("2026-10-18T12:00:00"),
+  );
+
+assert(
+  v34SubjectHome.context.academicYear ===
+    "2026-2027" &&
+    v34SubjectHome.context.semester === "1",
+  "V3.4 — Subject Home resolves the active Academic Year and Semester",
+  JSON.stringify(v34SubjectHome.context)
+);
+
+assert(
+  v34SubjectHome.total === 2,
+  "V3.4 — Subject Home includes current Semester + blank Semester only",
+  `Got total: ${v34SubjectHome.total}`
+);
+
+assert(
+  v34SubjectHome.list
+    .map((item) => item.name)
+    .sort()
+    .join("|") ===
+    ["MATH", "SCIENCE"].sort().join("|"),
+  "V3.4 — only subjects with resources in the active learning context are shown",
+  JSON.stringify(v34SubjectHome.list)
+);
+
+assert(
+  !v34SubjectHome.list.some(
+    (item) =>
+      item.name === "ARABIC" ||
+      item.name === "ENGLISH"
+  ),
+  "V3.4 — wrong Semester and old Academic Year subjects stay hidden from current Subject Home",
+  JSON.stringify(v34SubjectHome.list)
+);
+
+
+
+// ============================================================
+// V3.5 — PARENT RESOURCE VIEW / NEWEST-FIRST SORT
+// ============================================================
+console.log("\n--- V3.5: PARENT RESOURCE VIEW SORTING ---");
+
+const v35SortRows = [
+  {
+    id: "Q-000381",
+    grade: "4 Inter",
+    subject: "SCIENCE",
+    chapter: "Matter",
+    topic: "Matter",
+    taskName: "Matter",
+    type: "PDF",
+    link: "#381",
+  },
+  {
+    id: "Q-002297",
+    grade: "4 Inter",
+    subject: "SCIENCE",
+    chapter: "Animals",
+    topic: "Animals",
+    taskName: "Animals",
+    type: "PDF",
+    link: "#2297",
+  },
+  {
+    id: "Q-001418",
+    grade: "4 Inter",
+    subject: "SCIENCE",
+    chapter: "Energy",
+    topic: "Energy",
+    taskName: "Energy",
+    type: "PDF",
+    link: "#1418",
+  },
+] as any;
+
+assert(
+  getWorksheetNumericId("Q-002297") === 2297,
+  "V3.5 — numeric resource ID parser reads the final sequence correctly",
+  `Got: ${getWorksheetNumericId("Q-002297")}`
+);
+
+assert(
+  sortWorksheetsByMode(
+    v35SortRows,
+    "newest",
+    "4 Inter",
+  )
+    .map((item) => item.id)
+    .join("|") ===
+    "Q-002297|Q-001418|Q-000381",
+  "V3.5 — default newest sort uses highest resource ID first",
+);
+
+assert(
+  sortWorksheetsByMode(
+    v35SortRows,
+    "oldest",
+    "4 Inter",
+  )
+    .map((item) => item.id)
+    .join("|") ===
+    "Q-000381|Q-001418|Q-002297",
+  "V3.5 — manual oldest sort uses lowest resource ID first",
+);
+
+assert(
+  sortWorksheetsByMode(
+    v35SortRows,
+    "title",
+    "4 Inter",
+  )
+    .map((item) => item.taskName)
+    .join("|") ===
+    "Animals|Energy|Matter",
+  "V3.5 — manual title sort orders resource titles A-Z",
 );
 
 console.log("\n==================================================");
